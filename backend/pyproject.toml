@@ -1,0 +1,45 @@
+[project]
+name = "cs-project-2025-chessnok"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aioboto3>=15.5.0",
+    "alembic>=1.17.1",
+    "fastmcp>=0.9.0",
+    "langfuse>=2.0.0",
+    "openai>=1.0.0",
+    "argon2-cffi>=25.1.0",
+    "asyncpg>=0.30.0",
+    "fastapi>=0.121.0",
+    "greenlet>=3.2.4",
+    "httpx>=0.28.1",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
+    "psycopg2-binary>=2.9.11",
+    "pydantic-settings>=2.11.0",
+    "pydantic[email]>=2.12.4",
+    "pyjwt>=2.10.1",
+    "python-dotenv>=1.2.1",
+    "python-sat>=0.1.7.dev26",
+    "redis>=7.1.0",
+    "reportlab>=4.2.5",
+    "sqlalchemy[asyncio]>=2.0.44",
+    "uvicorn[standard]>=0.38.0",
+    "jinja2>=3.1.4",
+]
+
+[dependency-groups]
+dev = []
+lint = [
+    "black>=25.9.0",
+    "isort>=7.0.0",
+]
+test = [
+    "pytest>=8.4.2",
+]
+
+[tool.isort]
+profile="black"
+skip = ["alembic", ".venv"]

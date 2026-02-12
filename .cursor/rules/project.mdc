@@ -1,0 +1,33 @@
+---
+description: Project overview and how agents should work with relohelp
+alwaysApply: true
+---
+
+# Relohelp — Project Rules
+
+## What This Repo Is
+
+- **Product**: Minimal auth template — register, login, email verification, password reset. Use as a starting point for new projects.
+- **Stack**: React 19 + TypeScript + Vite (frontend), FastAPI + SQLAlchemy 2 async + Alembic (backend), PostgreSQL, Docker Compose.
+- **Tooling**: `uv` for Python (backend), Node 20+ and npm for frontend.
+
+## How Agents Should Work
+
+1. **Scope**: Prefer changing only what’s needed. Backend changes live under `backend/`, frontend under `frontend/`. Do not mix backend and frontend logic in the same edit unless the task explicitly requires both (e.g. new API + UI).
+2. **Context**: Before editing, open or reference the relevant files (routes, schemas, models for backend; pages, api modules, components for frontend). Follow existing naming and structure in that area.
+3. **APIs**: Backend exposes REST under `/api/v1/`. Frontend uses `src/api/client.ts` (axios with credentials, 401 refresh). New resources: add route + schema in backend, then add a corresponding `src/api/<resource>.ts` and use it from pages.
+4. **Data flow**: Backend uses async SQLAlchemy, Pydantic schemas, and `get_db_session` / `get_current_user` dependencies. Frontend uses react-router-dom, AuthContext for user state, and api modules that return typed interfaces.
+5. **Quality**: Run backend tests with `uv run pytest` from `backend/`. Run frontend lint with `npm run lint` and tests with `npm run test` from `frontend/`. Fix new lint/type errors introduced by your changes.
+6. **Git**: Use short-lived feature branches from `main` (e.g. `feature/schedules-export`). Prefer small, reviewable PRs.
+
+## Repo Layout (High Level)
+
+- `backend/` — FastAPI app, `app/api/v1/routes/`, `app/api/v1/schemas/`, `app/db/models/`, `alembic/`, `tests/`
+- `frontend/` — Vite app, `src/pages/`, `src/api/`, `src/components/`, `src/layouts/`, `src/context/`
+- `docker-compose.yml` — Full stack (backend, frontend, db). Backend needs `backend/.env` (see `backend/.env.example`); optional `RESEND_API_KEY` for email.
+
+## When Adding Features
+
+- **New backend resource**: Add model in `app/db/models/`, schema in `app/api/v1/schemas/`, routes in `app/api/v1/routes/`, register router in `app/main.py`. Create and apply Alembic migration.
+- **New frontend screen**: Add page under `src/pages/`, route in `App.tsx`, and api functions in `src/api/` if needed. Use existing UI components from `src/components/ui/` (shadcn).
+- **Environment**: Never commit secrets. Use `backend/.env` for backend env (and copy from `.env.example`). Document new required env in README or backend README.

@@ -1,0 +1,13 @@
+{% extends "email/base.txt" %}
+
+{% block content %}
+Verify Email
+
+Thank you for registering. Open the link below to verify your email:
+
+{{ link }}
+
+If you didn't register, please ignore this email.
+
+Token: {{ token }}
+{% endblock %}

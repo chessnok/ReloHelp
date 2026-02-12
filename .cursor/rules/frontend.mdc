@@ -1,0 +1,44 @@
+---
+description: Frontend conventions — React, TypeScript, Vite, API, UI
+globs: frontend/**/*
+alwaysApply: false
+---
+
+# Frontend Rules
+
+## Stack
+
+- **React 19** with **TypeScript**, **Vite 7**, **React Router 7**
+- **UI**: shadcn/ui (Radix primitives), Tailwind CSS 4, `components.json` in project root
+- **Forms**: react-hook-form, @hookform/resolvers, zod
+- **HTTP**: axios via `src/api/client.ts` (credentials, 401 → refresh then retry or redirect to login)
+
+## Structure
+
+- `src/pages/` — Route-level components; one folder per area (e.g. `auth/`, `institutions/`, `schedules/`)
+- `src/api/` — One module per resource (e.g. `institutions.ts`, `schedules.ts`). Each exports types (`Institution`, `InstitutionCreate`, …) and an object with `create`, `list`, `get`, `update`, `delete` (or subset).
+- `src/components/ui/` — shadcn components; do not change their internals unless customizing. Add new components via shadcn CLI when possible.
+- `src/layouts/` — `AuthLayout`, `MainLayout`, `ProtectedRoutes`
+- `src/context/` — `AuthContext` for auth state and logout
+- `src/lib/utils.ts` — shared helpers (e.g. `cn`)
+
+## Conventions
+
+1. **API usage**: Always use `apiClient` from `src/api/client.ts`. Define TypeScript interfaces for request/response in the same file as the api functions (e.g. `Institution`, `InstitutionCreate`). Paths are `/api/v1/<resource>` or `/api/v1/<resource>/:id`.
+2. **Routes**: Routes are defined in `App.tsx`. Use `Navigate` for catch-all. Protected routes live under `<ProtectedRoutes>` and `<MainLayout />`.
+3. **Naming**: Pages are named `*Page.tsx` (e.g. `InstitutionDetailPage.tsx`). API modules are named after the resource in camelCase (e.g. `classGroups.ts`, `timeSlots.ts`).
+4. **Components**: Prefer functional components. Use existing UI building blocks from `src/components/ui/`; add new shadcn components via `npx shadcn@latest add <component>`.
+5. **Styling**: Use Tailwind and `cn()` for class merging. Do not introduce another CSS-in-JS or global CSS for component styling unless the project already uses it.
+6. **Auth**: Use `AuthContext` for current user and login/logout. The axios client handles 401 and token refresh; redirect to `/login` on refresh failure.
+
+## Adding a New Resource (Frontend)
+
+1. Add `src/api/<resource>.ts`: interfaces + `create`/`list`/`get`/`update`/`delete` calling `apiClient` with `/api/v1/<resource>`.
+2. Add or reuse pages under `src/pages/`, and register routes in `App.tsx`.
+3. Use existing layouts and `ProtectedRoutes`; do not add new auth mechanisms unless required.
+
+## Quality
+
+- Run `npm run lint` and fix ESLint errors.
+- Run `npm run test` (Vitest) and add/update tests when changing behavior.
+- Keep TypeScript strict: no `any` for new code; fix type errors in edited files.
