@@ -1,0 +1,37 @@
+name: Docker Build Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-docker-builds:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service: [backend, frontend]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image for ${{ matrix.service }}
+      run: |
+        SERVICE_DIR="${{ matrix.service }}"
+        
+        if [ ! -d "$SERVICE_DIR" ]; then
+          echo "❌ Directory $SERVICE_DIR not found"
+          exit 1
+        fi
+        
+        if [ ! -f "$SERVICE_DIR/Dockerfile" ]; then
+          echo "❌ Dockerfile not found in $SERVICE_DIR"
+          exit 1
+        fi
+        
+        docker build -t $SERVICE_DIR-test ./$SERVICE_DIR
+        echo "✅ $SERVICE_DIR Docker image built successfully"

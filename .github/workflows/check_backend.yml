@@ -1,0 +1,51 @@
+name: Check backend
+
+on:
+  push:
+    paths:
+      - "backend/**"
+  pull_request:
+    paths:
+      - "backend/**"
+
+jobs:
+  lint:
+    name: Lint Backend Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --frozen --only-group lint
+
+      - name: Run Black (check only)
+        working-directory: backend
+        run: uv run black --check ./
+
+      - name: Run isort (check only)
+        working-directory: backend
+        run: uv run isort --check-only ./
+  test:
+    name: Test Backend Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --frozen --group test
+
+      - name: Run Pytest
+        working-directory: backend
+        run: uv run pytest
