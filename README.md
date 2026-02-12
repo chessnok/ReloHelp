@@ -2,6 +2,9 @@
 
 A minimal full-stack template with **authentication only**: register, login, email verification, password reset. Use it as a starting point for new projects.
 
+## What we are building 
+https://www.notion.so/MVP-description-and-App-Architecture-3055ee5a340e80729cacc041f45b513c
+
 ## Stack
 
 - **Frontend**: React 19, TypeScript, Vite, React Router, shadcn/ui, Tailwind. Auth via cookies (access + refresh tokens).
