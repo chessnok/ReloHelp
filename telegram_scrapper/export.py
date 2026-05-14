@@ -7,18 +7,27 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import logging
 import os
+import sys
 from datetime import timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.tl.custom.message import Message
 
+if TYPE_CHECKING:
+    from datetime import datetime
+
 load_dotenv()
 
 _DEFAULT_CSV = Path(__file__).resolve().parent / "chat_export.csv"
+
+# Used when streaming many messages (batch export); pauses to reduce flood-wait risk.
+INTER_BATCH_MESSAGE_COUNT = 500
+INTER_BATCH_SLEEP_SEC = 10.0
 
 
 def coerce_chat_entity(chat_id: int | str) -> int | str:
@@ -71,6 +80,83 @@ def _date_created_iso(message: Message) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.isoformat()
+
+
+def _message_dt_utc(message: Message) -> "datetime":
+    from datetime import datetime as dtmod
+
+    d: dtmod = message.date
+    if d.tzinfo is None:
+        return d.replace(tzinfo=timezone.utc)
+    return d.astimezone(timezone.utc)
+
+
+async def write_messages_from_peer(
+    client: TelegramClient,
+    peer: Any,
+    writer: csv.DictWriter,
+    seen_message_ids: set[int],
+    *,
+    limit: int | None,
+    min_date_utc: "datetime | None",
+    count_before: int = 0,
+) -> tuple[int, "datetime | None", "datetime | None"]:
+    """
+    Stream messages newest-first. Writes rows with non-empty text/caption.
+
+    Stops when a message is strictly older than ``min_date_utc`` (if set), or when
+    total written (including ``count_before``) reaches ``limit`` (if set).
+
+    Returns ``(rows_written_this_call, newest_written_utc, oldest_written_utc)``.
+    """
+    from datetime import datetime as dtmod
+
+    written = 0
+    newest: dtmod | None = None
+    oldest: dtmod | None = None
+    since_last_pause = 0
+    total = count_before
+
+    async for message in client.iter_messages(peer, reverse=False):
+        if not isinstance(message, Message):
+            continue
+        if message.id in seen_message_ids:
+            continue
+
+        md = _message_dt_utc(message)
+        if min_date_utc is not None and md < min_date_utc:
+            break
+
+        body = _message_text_or_caption(message)
+        if not body:
+            continue
+
+        writer.writerow(
+            {
+                "text_or_caption": body,
+                "reply_to": _reply_to_id(message),
+                "chat_id": _chat_id(message),
+                "date_created": _date_created_iso(message),
+            }
+        )
+        seen_message_ids.add(message.id)
+        written += 1
+        total += 1
+        since_last_pause += 1
+
+        if newest is None or md > newest:
+            newest = md
+        if oldest is None or md < oldest:
+            oldest = md
+
+        if limit is not None and total >= limit:
+            break
+
+        if since_last_pause >= INTER_BATCH_MESSAGE_COUNT:
+            since_last_pause = 0
+            await asyncio.sleep(INTER_BATCH_SLEEP_SEC)
+
+    return written, newest, oldest
 
 
 async def export_chat_to_csv(
@@ -169,6 +255,13 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    import coloredlogs
+
+    coloredlogs.install(
+        level=logging.INFO,
+        stream=sys.stdout,
+        isatty=sys.stdout.isatty(),
+    )
     args = _parse_args()
     delim = "\t" if args.tsv else ","
     path = asyncio.run(
