@@ -11,6 +11,27 @@ https://www.notion.so/MVP-description-and-App-Architecture-3055ee5a340e80729cacc
 - **Backend**: FastAPI, SQLAlchemy 2 (async), Alembic, PostgreSQL. User model, sessions, email verification and password reset tokens.
 - **Infrastructure**: PostgreSQL; Docker Compose to run the full stack. Optional: Resend for emails (verification + password reset).
 
+## Modules
+### telegram_scrapper
+#### First run
+```bash
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
+source .venv/bin/activate
+```
+### Each time
+```bash
+python export.py 1350470024 --limit 1500 --append -o ./my_export.csv
+```
+### Check validity of csv
+```bash
+python3 check_scv_readability.py
+```
+
+Traceback (most recent call last):
+
+
 ## Setup
 
 ### 1. Run with Docker Compose
