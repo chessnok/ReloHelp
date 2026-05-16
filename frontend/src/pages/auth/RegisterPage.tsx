@@ -71,17 +71,19 @@ export const RegisterPage: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Register</CardTitle>
-        <CardDescription>Create a new account</CardDescription>
+        <CardTitle>Create your account</CardTitle>
+        <CardDescription>
+          Start planning your move in minutes
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive" className="mb-6">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <FormField
               control={form.control}
               name="email"
@@ -93,7 +95,7 @@ export const RegisterPage: React.FC = () => {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="email@example.com" {...field} />
+                    <Input placeholder="you@example.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -110,7 +112,7 @@ export const RegisterPage: React.FC = () => {
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="******" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -130,7 +132,7 @@ export const RegisterPage: React.FC = () => {
                 <FormItem>
                   <FormLabel>Confirm Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="******" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -138,19 +140,20 @@ export const RegisterPage: React.FC = () => {
             />
             <Button
               type="submit"
+              size="lg"
               className="w-full"
               disabled={form.formState.isSubmitting}
             >
-              {form.formState.isSubmitting ? "Registering..." : "Register"}
+              {form.formState.isSubmitting ? "Creating account…" : "Create account"}
             </Button>
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="flex justify-center">
-        <p className="text-sm text-gray-600">
+      <CardFooter className="flex justify-center pt-2">
+        <p className="text-sm text-muted-stone">
           Already have an account?{" "}
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Login
+          <Link to="/login" className="text-ink underline-offset-4 hover:underline">
+            Sign in
           </Link>
         </p>
       </CardFooter>

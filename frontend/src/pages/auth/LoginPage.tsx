@@ -62,19 +62,19 @@ export const LoginPage: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Login</CardTitle>
+        <CardTitle>Welcome back</CardTitle>
         <CardDescription>
-          Enter your credentials to access your account
+          Sign in to continue your relocation journey
         </CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive" className="mb-6">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <FormField
               control={form.control}
               name="email"
@@ -86,7 +86,7 @@ export const LoginPage: React.FC = () => {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="email@example.com" {...field} />
+                    <Input placeholder="you@example.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -103,7 +103,7 @@ export const LoginPage: React.FC = () => {
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="******" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -111,29 +111,28 @@ export const LoginPage: React.FC = () => {
             />
             <Button
               type="submit"
+              size="lg"
               className="w-full"
               disabled={form.formState.isSubmitting}
             >
-              {form.formState.isSubmitting ? "Logging in..." : "Login"}
+              {form.formState.isSubmitting ? "Signing in…" : "Sign in"}
             </Button>
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="flex justify-center">
-        <p className="text-sm text-gray-600">
-          Don't have an account?{" "}
-          <Link to="/register" className="text-blue-600 hover:underline">
-            Register
+      <CardFooter className="flex flex-col items-center gap-3 pt-2">
+        <p className="text-sm text-muted-stone">
+          New to Relohelp?{" "}
+          <Link to="/register" className="text-ink underline-offset-4 hover:underline">
+            Create an account
           </Link>
         </p>
-        <div className="ml-4">
-          <Link
-            to="/forgot-password"
-            className="text-sm text-blue-600 hover:underline"
-          >
-            Forgot Password?
-          </Link>
-        </div>
+        <Link
+          to="/forgot-password"
+          className="text-sm text-dusk-link hover:text-ink transition-colors"
+        >
+          Forgot your password?
+        </Link>
       </CardFooter>
     </Card>
   );

@@ -76,14 +76,17 @@ export const ResetPasswordPage: React.FC = () => {
     return (
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>Invalid Link</CardTitle>
+          <CardTitle>Invalid link</CardTitle>
           <CardDescription>
             This password reset link is invalid or missing a token.
           </CardDescription>
         </CardHeader>
-        <CardFooter className="flex justify-center">
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Back to Login
+        <CardFooter className="flex justify-center pt-2">
+          <Link
+            to="/login"
+            className="text-sm text-ink underline-offset-4 hover:underline"
+          >
+            Back to sign in
           </Link>
         </CardFooter>
       </Card>
@@ -93,17 +96,19 @@ export const ResetPasswordPage: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Reset Password</CardTitle>
-        <CardDescription>Enter your new password</CardDescription>
+        <CardTitle>Set a new password</CardTitle>
+        <CardDescription>
+          Choose a password at least 8 characters long
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive" className="mb-6">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <FormField
               control={form.control}
               name="password"
@@ -118,7 +123,7 @@ export const ResetPasswordPage: React.FC = () => {
                 <FormItem>
                   <FormLabel>New Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="******" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -138,7 +143,7 @@ export const ResetPasswordPage: React.FC = () => {
                 <FormItem>
                   <FormLabel>Confirm New Password</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="******" {...field} />
+                    <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -146,10 +151,11 @@ export const ResetPasswordPage: React.FC = () => {
             />
             <Button
               type="submit"
+              size="lg"
               className="w-full"
               disabled={form.formState.isSubmitting}
             >
-              {form.formState.isSubmitting ? "Resetting..." : "Reset Password"}
+              {form.formState.isSubmitting ? "Resetting…" : "Reset password"}
             </Button>
           </form>
         </Form>

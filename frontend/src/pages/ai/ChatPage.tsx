@@ -67,13 +67,17 @@ export const ChatPage: React.FC = () => {
   if (!chatId) return null;
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div className="flex h-full flex-col bg-canvas">
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-4 py-6">
+        <div className="mx-auto w-full max-w-3xl px-6 py-10">
           {messages.length === 0 && !loading && (
-            <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-              <p className="text-muted-foreground text-sm">
-                Send a message to start the conversation.
+            <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+              <p className="font-display text-[28px] tracking-tight text-ink">
+                Say hello to get started
+              </p>
+              <p className="max-w-sm text-[15px] text-muted-stone">
+                Ask anything — visas, neighborhoods, taxes, schools, or what to
+                pack first.
               </p>
             </div>
           )}
@@ -81,40 +85,40 @@ export const ChatPage: React.FC = () => {
             <div
               key={i}
               className={cn(
-                "group flex gap-4 py-4",
+                "group flex gap-3 py-3",
                 m.role === "user" ? "justify-end" : "justify-start"
               )}
             >
               {m.role === "assistant" && (
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <span className="text-sm font-medium">AI</span>
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-warm-mist text-terracotta">
+                  <span className="text-[11px] font-medium tracking-wide">AI</span>
                 </div>
               )}
               <div
                 className={cn(
-                  "max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm",
+                  "max-w-[85%] rounded-3xl px-5 py-3 text-[15px] leading-[1.55]",
                   m.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                    ? "bg-ink text-canvas"
+                    : "bg-fog text-ink"
                 )}
               >
-                <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                <p className="whitespace-pre-wrap">{m.content}</p>
               </div>
               {m.role === "user" && (
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                  <span className="text-xs font-medium">You</span>
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink text-canvas">
+                  <span className="text-[11px] font-medium">You</span>
                 </div>
               )}
             </div>
           ))}
           {loading && (
-            <div className="flex gap-4 py-4">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <span className="text-sm font-medium">AI</span>
+            <div className="flex gap-3 py-3">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-warm-mist text-terracotta">
+                <span className="text-[11px] font-medium tracking-wide">AI</span>
               </div>
-              <div className="flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
-                <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Thinking...</span>
+              <div className="flex items-center gap-2 rounded-3xl bg-fog px-5 py-3">
+                <Loader2 className="size-4 animate-spin text-muted-stone" />
+                <span className="text-[14px] text-muted-stone">Thinking…</span>
               </div>
             </div>
           )}
@@ -122,26 +126,26 @@ export const ChatPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="border-t border-border bg-background">
-        <div className="mx-auto max-w-3xl px-4 py-4">
+      <div className="border-t border-border/60 bg-canvas">
+        <div className="mx-auto max-w-3xl px-6 py-5">
           {error && (
             <Alert variant="destructive" className="mb-3">
               {error}
             </Alert>
           )}
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2 rounded-3xl border border-border bg-canvas p-2 transition-colors focus-within:border-ink">
             <Textarea
-              placeholder="Message…"
+              placeholder="Message Relohelp…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={loading}
               rows={1}
-              className="min-h-[52px] max-h-[200px] resize-none py-3"
+              className="min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent py-2 focus-visible:border-0 focus-visible:ring-0"
             />
             <Button
               size="icon"
-              className="size-[52px] shrink-0"
+              className="size-11 shrink-0"
               onClick={sendMessage}
               disabled={loading || !input.trim()}
               aria-label="Send message"
@@ -149,7 +153,7 @@ export const ChatPage: React.FC = () => {
               {loading ? (
                 <Loader2 className="size-5 animate-spin" />
               ) : (
-                <Send className="size-5" />
+                <Send className="size-4" />
               )}
             </Button>
           </div>
