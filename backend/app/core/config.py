@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     # MCP server (FastMCP); must include /mcp path for HTTP transport
     MCP_SERVER_URL: str = "http://localhost:8001/mcp"
 
+    # Shared secret for service-to-service internal API calls (e.g. MCP -> backend)
+    INTERNAL_API_TOKEN: str | None = None
+
     @property
     def REDIS_URL(self) -> str:
         """Return a full Redis URL (redis:// or rediss://)."""
