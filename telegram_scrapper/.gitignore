@@ -4,3 +4,6 @@
 *.session-journal
 __pycache__/
 *.py[cod]
+merged_chat_export.csv
+my_export.csv
+logs/

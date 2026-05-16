@@ -20,10 +20,22 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 source .venv/bin/activate
 ```
-### Each time
+### Run single chat 
 ```bash
 python export.py 1350470024 --limit 1500 --append -o ./my_export.csv
 ```
+### Run multiple chats 
+```bash
+python -m telegram_scrapper.batch_export \
+  --limit 1500 \
+  --sleep-between-chats 10 \
+  --since-days 180 \
+  -o telegram_scrapper/merged.csv 
+```
+
+Per chat, effective row cap is `min(--limit, number_of_messages in chats.json)` when both are set. Logs: `telegram_scrapper/logging.ini` -> console + `telegram_scrapper/logs/log.log`. With `--since-days`, check logs for the computed equivalent `--until-date` (UTC calendar day).
+
+
 ### Check validity of csv
 ```bash
 python3 check_scv_readability.py
