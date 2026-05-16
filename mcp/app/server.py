@@ -34,7 +34,9 @@ async def get_user_email(user_id: str) -> dict:
 
     url = f"{settings.BACKEND_URL.rstrip('/')}/api/v1/internal/users/{user_id}/email"
     try:
-        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=settings.REQUEST_TIMEOUT_SECONDS
+        ) as client:
             response = await client.get(url, headers=_internal_headers())
     except httpx.HTTPError as exc:
         return {"email": "", "error": f"Backend unreachable: {exc}"}

@@ -1,0 +1,54 @@
+name: Check MCP
+
+on:
+  push:
+    paths:
+      - "mcp/**"
+      - ".github/workflows/mcp-tests.yml"
+  pull_request:
+    paths:
+      - "mcp/**"
+      - ".github/workflows/mcp-tests.yml"
+
+jobs:
+  lint:
+    name: Lint MCP Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        working-directory: mcp
+        run: uv sync --frozen --only-group lint
+
+      - name: Run Black (check only)
+        working-directory: mcp
+        run: uv run black --check ./
+
+      - name: Run isort (check only)
+        working-directory: mcp
+        run: uv run isort --check-only ./
+
+  test:
+    name: Test MCP Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up UV
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        working-directory: mcp
+        run: uv sync --frozen --group test
+
+      - name: Run Pytest
+        working-directory: mcp
+        run: uv run pytest
