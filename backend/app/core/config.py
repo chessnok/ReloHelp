@@ -1,7 +1,7 @@
-from typing import List
+from typing import Annotated, List
 
-from pydantic import AliasChoices, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AliasChoices, Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -12,7 +12,22 @@ class Settings(BaseSettings):
     APP_NAME: str = "FastAPI Base App"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
-    ALLOWED_ORIGINS: List[str] = ["*"]
+    ALLOWED_ORIGINS: Annotated[List[str], NoDecode] = ["*"]
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def _parse_allowed_origins(cls, v):
+        """Accept comma-separated string or single "*" in addition to JSON list."""
+        if v is None or v == "":
+            return ["*"]
+        if isinstance(v, str):
+            s = v.strip()
+            if s.startswith("["):
+                import json
+
+                return json.loads(s)
+            return [item.strip() for item in s.split(",") if item.strip()]
+        return v
 
     # Database settings
     DB_HOST: str = "db"
@@ -84,6 +99,9 @@ class Settings(BaseSettings):
 
     # MCP server (FastMCP); must include /mcp path for HTTP transport
     MCP_SERVER_URL: str = "http://localhost:8001/mcp"
+
+    # Shared secret for service-to-service internal API calls (e.g. MCP -> backend)
+    INTERNAL_API_TOKEN: str | None = None
 
     @property
     def REDIS_URL(self) -> str:

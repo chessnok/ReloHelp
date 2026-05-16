@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.v1.routes import ai, auth, ping
+from app.api.v1.routes import ai, auth, internal, ping
 from app.core.config import settings
 from app.core.logger import logger
 from app.db.session import engine
@@ -46,3 +46,4 @@ app.add_middleware(
 app.include_router(ping.router)
 app.include_router(auth.router)
 app.include_router(ai.router)
+app.include_router(internal.router)

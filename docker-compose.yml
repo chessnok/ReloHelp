@@ -6,8 +6,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      mcp:
-        condition: service_started
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -15,21 +13,18 @@ services:
       DB_PASSWORD: postgres
       DB_NAME: postgres
       MCP_SERVER_URL: http://mcp:8001/mcp
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-changeme-internal-token}
     env_file: backend/.env
 
   mcp:
-    build: backend
-    command: ["uv", "run", "python", "-m", "app.mcp.run_server"]
+    build: mcp
     depends_on:
-      db:
-        condition: service_healthy
+      backend:
+        condition: service_started
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: postgres
-    env_file: backend/.env
+      BACKEND_URL: http://backend:8000
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-changeme-internal-token}
+      MCP_PORT: 8001
     ports:
       - "8001:8001"
 
