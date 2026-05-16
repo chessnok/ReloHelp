@@ -7,7 +7,9 @@ class ChatRequest(BaseModel):
     """Request body for POST /api/ai/chat."""
 
     message: str = Field(..., min_length=1, max_length=32_768)
-    conversation_id: str | None = Field(None, description="Optional conversation ID for multi-turn context.")
+    conversation_id: str | None = Field(
+        None, description="Optional conversation ID for multi-turn context."
+    )
 
 
 class ChatResponse(BaseModel):

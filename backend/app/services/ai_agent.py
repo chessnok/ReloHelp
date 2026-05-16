@@ -47,7 +47,9 @@ class AIAgentService:
             self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         return self._openai_client
 
-    async def _call_mcp_tool(self, tool_name: str, arguments: dict, user_id: UUID) -> dict:
+    async def _call_mcp_tool(
+        self, tool_name: str, arguments: dict, user_id: UUID
+    ) -> dict:
         """Call MCP server tool with injected user_id. Returns tool result dict."""
         from fastmcp import Client
 
@@ -61,11 +63,21 @@ class AIAgentService:
             result = await client.call_tool(tool_name, params)
         # CallToolResult may have .content or .result
         if hasattr(result, "content") and result.content:
-            part = result.content[0] if isinstance(result.content, list) else result.content
+            part = (
+                result.content[0]
+                if isinstance(result.content, list)
+                else result.content
+            )
             if hasattr(part, "text"):
-                return json.loads(part.text) if isinstance(part.text, str) else part.text
+                return (
+                    json.loads(part.text) if isinstance(part.text, str) else part.text
+                )
         if hasattr(result, "result"):
-            return result.result if isinstance(result.result, dict) else {"result": result.result}
+            return (
+                result.result
+                if isinstance(result.result, dict)
+                else {"result": result.result}
+            )
         return {"error": "Unknown MCP response format"}
 
     async def chat(
@@ -106,7 +118,9 @@ class AIAgentService:
                             raise
                         choice = response.choices[0]
                         msg = choice.message
-                        gen_span.update(output=msg.content or str(getattr(msg, "tool_calls", [])))
+                        gen_span.update(
+                            output=msg.content or str(getattr(msg, "tool_calls", []))
+                        )
                 else:
                     try:
                         client = self._get_openai()
@@ -131,7 +145,14 @@ class AIAgentService:
                 }
                 if _tc_list:
                     assistant_msg["tool_calls"] = [
-                        {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
                         for tc in _tc_list
                     ]
                 messages.append(assistant_msg)
@@ -140,7 +161,11 @@ class AIAgentService:
                 for tc in msg.tool_calls:
                     name = tc.function.name
                     try:
-                        args = json.loads(tc.function.arguments) if isinstance(tc.function.arguments, str) else tc.function.arguments
+                        args = (
+                            json.loads(tc.function.arguments)
+                            if isinstance(tc.function.arguments, str)
+                            else tc.function.arguments
+                        )
                     except json.JSONDecodeError:
                         args = {}
                     if langfuse:
@@ -151,14 +176,18 @@ class AIAgentService:
                                 result = await self._call_mcp_tool(name, args, user_id)
                             except Exception as e:
                                 logger.warning("MCP tool %s failed: %s", name, e)
-                                result = {"error": "I couldn't retrieve your email right now."}
+                                result = {
+                                    "error": "I couldn't retrieve your email right now."
+                                }
                             tool_span.update(output=result)
                     else:
                         try:
                             result = await self._call_mcp_tool(name, args, user_id)
                         except Exception as e:
                             logger.warning("MCP tool %s failed: %s", name, e)
-                            result = {"error": "I couldn't retrieve your email right now."}
+                            result = {
+                                "error": "I couldn't retrieve your email right now."
+                            }
                     messages.append(
                         {
                             "role": "tool",
@@ -167,7 +196,12 @@ class AIAgentService:
                         }
                     )
             else:
-                messages.append({"role": "assistant", "content": "I ran into a limit. Please try again."})
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": "I ran into a limit. Please try again.",
+                    }
+                )
             return messages
 
         if langfuse:
