@@ -39,7 +39,7 @@ export const ChatSidebar: React.FC = () => {
                   "group flex items-center gap-1 rounded-lg text-sm transition-colors",
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent/70"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/70",
                 )}
               >
                 <Link

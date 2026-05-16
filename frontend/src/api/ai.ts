@@ -13,7 +13,7 @@ export interface ChatResponse {
 
 export const chat = async (
   message: string,
-  conversationId?: string | null
+  conversationId?: string | null,
 ): Promise<ChatResponse> => {
   const response = await client.post<ChatResponse>("/api/ai/chat", {
     message,

@@ -50,7 +50,7 @@ export const MainLayout: React.FC = () => {
                       "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                       isActive
                         ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                     )}
                   >
                     <Icon className="size-4" />
@@ -70,7 +70,7 @@ export const MainLayout: React.FC = () => {
       <main
         className={cn(
           "flex-1 min-h-0 flex flex-col",
-          !isChat && "mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8"
+          !isChat && "mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8",
         )}
       >
         <Outlet />

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useParams } from "react-router-dom";
 import { Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,20 +18,18 @@ const MAX_TITLE_LENGTH = 50;
 
 export const ChatPage: React.FC = () => {
   const { chatId } = useParams<{ chatId: string }>();
-  const {
-    chats,
-    getMessages,
-    addMessage,
-    setConversationId,
-    setChatTitle,
-  } = useChat();
+  const { chats, getMessages, addMessage, setConversationId, setChatTitle } =
+    useChat();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const chatItem = chatId ? chats.find((c) => c.id === chatId) : null;
-  const messages = chatId ? getMessages(chatId) : [];
+  const messages = useMemo(
+    () => (chatId ? getMessages(chatId) : []),
+    [chatId, getMessages],
+  );
   const conversationId = chatItem?.conversationId ?? null;
 
   useEffect(() => {
@@ -39,7 +43,12 @@ export const ChatPage: React.FC = () => {
     setError(null);
     addMessage(chatId, { role: "user", content: text });
     if (chatItem?.title === "New chat") {
-      setChatTitle(chatId, text.length > MAX_TITLE_LENGTH ? text.slice(0, MAX_TITLE_LENGTH) + "…" : text);
+      setChatTitle(
+        chatId,
+        text.length > MAX_TITLE_LENGTH
+          ? text.slice(0, MAX_TITLE_LENGTH) + "…"
+          : text,
+      );
     }
     setLoading(true);
     try {
@@ -48,14 +57,31 @@ export const ChatPage: React.FC = () => {
       addMessage(chatId, { role: "assistant", content: res.response });
     } catch (e) {
       const message =
-        e && typeof e === "object" && "response" in e && e.response && typeof e.response === "object" && "data" in e.response && e.response.data && typeof e.response.data === "object" && "detail" in e.response.data
+        e &&
+        typeof e === "object" &&
+        "response" in e &&
+        e.response &&
+        typeof e.response === "object" &&
+        "data" in e.response &&
+        e.response.data &&
+        typeof e.response.data === "object" &&
+        "detail" in e.response.data
           ? String((e.response.data as { detail: unknown }).detail)
           : "Something went wrong. Please try again.";
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [input, loading, chatId, conversationId, chatItem?.title, addMessage, setConversationId, setChatTitle]);
+  }, [
+    input,
+    loading,
+    chatId,
+    conversationId,
+    chatItem?.title,
+    addMessage,
+    setConversationId,
+    setChatTitle,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -82,7 +108,7 @@ export const ChatPage: React.FC = () => {
               key={i}
               className={cn(
                 "group flex gap-4 py-4",
-                m.role === "user" ? "justify-end" : "justify-start"
+                m.role === "user" ? "justify-end" : "justify-start",
               )}
             >
               {m.role === "assistant" && (
@@ -95,10 +121,12 @@ export const ChatPage: React.FC = () => {
                   "max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm",
                   m.role === "user"
                     ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                    : "bg-muted",
                 )}
               >
-                <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                <p className="whitespace-pre-wrap leading-relaxed">
+                  {m.content}
+                </p>
               </div>
               {m.role === "user" && (
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -114,7 +142,9 @@ export const ChatPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 rounded-2xl bg-muted px-4 py-3">
                 <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Thinking...</span>
+                <span className="text-sm text-muted-foreground">
+                  Thinking...
+                </span>
               </div>
             </div>
           )}
