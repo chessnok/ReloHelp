@@ -94,9 +94,7 @@ async def test_returns_user_email(client, make_user, internal_token):
     assert resp.json() == {"email": "found@example.com"}
 
 
-async def test_returns_empty_string_when_email_none(
-    client, db_session, internal_token
-):
+async def test_returns_empty_string_when_email_none(client, db_session, internal_token):
     """User row with NULL email should produce {"email": ""}."""
     from app.core.security import hash_password
     from app.db.models import User
