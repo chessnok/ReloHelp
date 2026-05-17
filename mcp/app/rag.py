@@ -240,7 +240,9 @@ def search(query: str, k: int = 5, snippet_chars: int = 300) -> list[dict[str, A
                 "n_msgs": meta.get("n_msgs"),
                 "date_min": meta.get("date_min"),
                 "date_max": meta.get("date_max"),
-                "snippet": (documents[i] or "")[:snippet_chars] if i < len(documents) else "",
+                "snippet": (
+                    (documents[i] or "")[:snippet_chars] if i < len(documents) else ""
+                ),
             }
         )
 

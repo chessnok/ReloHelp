@@ -33,11 +33,51 @@ def _embed(text: str) -> list[float]:
 
 
 DOCS = [
-    {"doc_id": "d:visa", "text": "how to get a visa for serbia", "chat_id": 1, "kind": "single", "n_msgs": 1, "date_min": "2026-01-01T00:00:00Z", "date_max": "2026-01-01T00:00:00Z"},
-    {"doc_id": "d:banking", "text": "opening a bank account abroad banking", "chat_id": 2, "kind": "single", "n_msgs": 1, "date_min": "2026-01-02T00:00:00Z", "date_max": "2026-01-02T00:00:00Z"},
-    {"doc_id": "d:housing", "text": "finding housing rentals", "chat_id": 3, "kind": "single", "n_msgs": 1, "date_min": "2026-01-03T00:00:00Z", "date_max": "2026-01-03T00:00:00Z"},
-    {"doc_id": "d:health", "text": "health insurance options", "chat_id": 4, "kind": "single", "n_msgs": 1, "date_min": "2026-01-04T00:00:00Z", "date_max": "2026-01-04T00:00:00Z"},
-    {"doc_id": "d:school", "text": "school enrollment for kids", "chat_id": 5, "kind": "single", "n_msgs": 1, "date_min": "2026-01-05T00:00:00Z", "date_max": "2026-01-05T00:00:00Z"},
+    {
+        "doc_id": "d:visa",
+        "text": "how to get a visa for serbia",
+        "chat_id": 1,
+        "kind": "single",
+        "n_msgs": 1,
+        "date_min": "2026-01-01T00:00:00Z",
+        "date_max": "2026-01-01T00:00:00Z",
+    },
+    {
+        "doc_id": "d:banking",
+        "text": "opening a bank account abroad banking",
+        "chat_id": 2,
+        "kind": "single",
+        "n_msgs": 1,
+        "date_min": "2026-01-02T00:00:00Z",
+        "date_max": "2026-01-02T00:00:00Z",
+    },
+    {
+        "doc_id": "d:housing",
+        "text": "finding housing rentals",
+        "chat_id": 3,
+        "kind": "single",
+        "n_msgs": 1,
+        "date_min": "2026-01-03T00:00:00Z",
+        "date_max": "2026-01-03T00:00:00Z",
+    },
+    {
+        "doc_id": "d:health",
+        "text": "health insurance options",
+        "chat_id": 4,
+        "kind": "single",
+        "n_msgs": 1,
+        "date_min": "2026-01-04T00:00:00Z",
+        "date_max": "2026-01-04T00:00:00Z",
+    },
+    {
+        "doc_id": "d:school",
+        "text": "school enrollment for kids",
+        "chat_id": 5,
+        "kind": "single",
+        "n_msgs": 1,
+        "date_min": "2026-01-05T00:00:00Z",
+        "date_max": "2026-01-05T00:00:00Z",
+    },
 ]
 
 QA_SET = [
@@ -87,9 +127,9 @@ class TestRecall:
     def test_recall_at_3_returns_expected_doc_for_every_query(self, seeded_collection):
         for question, expected in QA_SET:
             hits = rag.search(question, k=3)
-            assert expected in {h["doc_id"] for h in hits}, (
-                f"query={question!r} expected={expected} got={[h['doc_id'] for h in hits]}"
-            )
+            assert expected in {
+                h["doc_id"] for h in hits
+            }, f"query={question!r} expected={expected} got={[h['doc_id'] for h in hits]}"
 
     def test_hits_carry_source_attribution(self, seeded_collection):
         hits = rag.search("visa question", k=1)

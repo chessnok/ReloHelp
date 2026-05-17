@@ -25,12 +25,48 @@ def sample_df() -> pd.DataFrame:
     """
     return pd.DataFrame(
         [
-            {"text_or_caption": "root q1", "msg_id": 1, "reply_to": None, "chat_id": 100, "date_created": "2026-01-01T10:00:00Z"},
-            {"text_or_caption": "reply a1", "msg_id": 2, "reply_to": 1, "chat_id": 100, "date_created": "2026-01-01T10:05:00Z"},
-            {"text_or_caption": "follow-up", "msg_id": 3, "reply_to": 2, "chat_id": 100, "date_created": "2026-01-01T10:06:00Z"},
-            {"text_or_caption": "standalone msg", "msg_id": 4, "reply_to": None, "chat_id": 100, "date_created": "2026-01-01T11:00:00Z"},
-            {"text_or_caption": "other root", "msg_id": 10, "reply_to": None, "chat_id": 200, "date_created": "2026-01-02T09:00:00Z"},
-            {"text_or_caption": "other reply", "msg_id": 11, "reply_to": 10, "chat_id": 200, "date_created": "2026-01-02T09:01:00Z"},
+            {
+                "text_or_caption": "root q1",
+                "msg_id": 1,
+                "reply_to": None,
+                "chat_id": 100,
+                "date_created": "2026-01-01T10:00:00Z",
+            },
+            {
+                "text_or_caption": "reply a1",
+                "msg_id": 2,
+                "reply_to": 1,
+                "chat_id": 100,
+                "date_created": "2026-01-01T10:05:00Z",
+            },
+            {
+                "text_or_caption": "follow-up",
+                "msg_id": 3,
+                "reply_to": 2,
+                "chat_id": 100,
+                "date_created": "2026-01-01T10:06:00Z",
+            },
+            {
+                "text_or_caption": "standalone msg",
+                "msg_id": 4,
+                "reply_to": None,
+                "chat_id": 100,
+                "date_created": "2026-01-01T11:00:00Z",
+            },
+            {
+                "text_or_caption": "other root",
+                "msg_id": 10,
+                "reply_to": None,
+                "chat_id": 200,
+                "date_created": "2026-01-02T09:00:00Z",
+            },
+            {
+                "text_or_caption": "other reply",
+                "msg_id": 11,
+                "reply_to": 10,
+                "chat_id": 200,
+                "date_created": "2026-01-02T09:01:00Z",
+            },
         ]
     )
 
@@ -50,7 +86,9 @@ class TestBuildThreads:
         assert single["kind"] == "single"
         assert single["n_msgs"] == 1
 
-    def test_thread_doc_concatenates_descendants_in_chronological_order(self, sample_df):
+    def test_thread_doc_concatenates_descendants_in_chronological_order(
+        self, sample_df
+    ):
         docs = rag.build_threads(sample_df)
         t = next(d for d in docs if d["doc_id"] == "thread:100:1")
         assert "root q1" in t["text"]
@@ -69,8 +107,20 @@ class TestBuildThreads:
     def test_drops_rows_with_empty_text(self):
         df = pd.DataFrame(
             [
-                {"text_or_caption": None, "msg_id": 1, "reply_to": None, "chat_id": 1, "date_created": "2026-01-01T00:00:00Z"},
-                {"text_or_caption": "real", "msg_id": 2, "reply_to": None, "chat_id": 1, "date_created": "2026-01-01T00:01:00Z"},
+                {
+                    "text_or_caption": None,
+                    "msg_id": 1,
+                    "reply_to": None,
+                    "chat_id": 1,
+                    "date_created": "2026-01-01T00:00:00Z",
+                },
+                {
+                    "text_or_caption": "real",
+                    "msg_id": 2,
+                    "reply_to": None,
+                    "chat_id": 1,
+                    "date_created": "2026-01-01T00:01:00Z",
+                },
             ]
         )
         docs = rag.build_threads(df)
@@ -85,7 +135,13 @@ class TestBuildThreads:
     def test_orphan_reply_with_missing_parent_becomes_single(self):
         df = pd.DataFrame(
             [
-                {"text_or_caption": "orphan", "msg_id": 99, "reply_to": 50, "chat_id": 7, "date_created": "2026-01-01T00:00:00Z"},
+                {
+                    "text_or_caption": "orphan",
+                    "msg_id": 99,
+                    "reply_to": 50,
+                    "chat_id": 7,
+                    "date_created": "2026-01-01T00:00:00Z",
+                },
             ]
         )
         docs = rag.build_threads(df)
@@ -114,7 +170,10 @@ class TestEmbed:
             assert vec == [0.0, 0.0, 0.0, 0.0]
             assert oc.embed.call_count == 2
             second_kwargs = oc.embed.call_args_list[1].kwargs
-            assert len(second_kwargs["input"]) <= rag.settings.RAG_EMBED_FALLBACK_CHAR_LIMIT
+            assert (
+                len(second_kwargs["input"])
+                <= rag.settings.RAG_EMBED_FALLBACK_CHAR_LIMIT
+            )
 
 
 class TestSearch:
@@ -123,14 +182,29 @@ class TestSearch:
         coll.query.return_value = {
             "ids": [["thread:1:1", "single:2:5"]],
             "distances": [[0.21, 0.33]],
-            "metadatas": [[
-                {"chat_id": 1, "kind": "thread", "n_msgs": 3, "date_min": "2026-01-01T00:00:00Z", "date_max": "2026-01-01T00:05:00Z"},
-                {"chat_id": 2, "kind": "single", "n_msgs": 1, "date_min": "2026-01-02T00:00:00Z", "date_max": "2026-01-02T00:00:00Z"},
-            ]],
+            "metadatas": [
+                [
+                    {
+                        "chat_id": 1,
+                        "kind": "thread",
+                        "n_msgs": 3,
+                        "date_min": "2026-01-01T00:00:00Z",
+                        "date_max": "2026-01-01T00:05:00Z",
+                    },
+                    {
+                        "chat_id": 2,
+                        "kind": "single",
+                        "n_msgs": 1,
+                        "date_min": "2026-01-02T00:00:00Z",
+                        "date_max": "2026-01-02T00:00:00Z",
+                    },
+                ]
+            ],
             "documents": [["root q1\n---\nreply", "standalone msg"]],
         }
-        with patch.object(rag, "_get_collection", return_value=coll), \
-             patch.object(rag, "embed_text", return_value=[0.0] * 1024):
+        with patch.object(rag, "_get_collection", return_value=coll), patch.object(
+            rag, "embed_text", return_value=[0.0] * 1024
+        ):
             with caplog.at_level("INFO", logger="app.rag"):
                 hits = rag.search("how to get visa", k=2)
         assert len(hits) == 2
@@ -145,9 +219,15 @@ class TestSearch:
 
     def test_clamps_k_to_max(self):
         coll = MagicMock()
-        coll.query.return_value = {"ids": [[]], "distances": [[]], "metadatas": [[]], "documents": [[]]}
-        with patch.object(rag, "_get_collection", return_value=coll), \
-             patch.object(rag, "embed_text", return_value=[0.0]):
+        coll.query.return_value = {
+            "ids": [[]],
+            "distances": [[]],
+            "metadatas": [[]],
+            "documents": [[]],
+        }
+        with patch.object(rag, "_get_collection", return_value=coll), patch.object(
+            rag, "embed_text", return_value=[0.0]
+        ):
             rag.search("q", k=999)
         called_k = coll.query.call_args.kwargs["n_results"]
         assert called_k == rag.settings.RAG_MAX_K
@@ -164,8 +244,24 @@ class TestIngest:
         coll = MagicMock()
         coll.get.return_value = {"ids": ["thread:1:1"]}
         docs = [
-            {"doc_id": "thread:1:1", "text": "a", "chat_id": 1, "kind": "thread", "n_msgs": 2, "date_min": "x", "date_max": "y"},
-            {"doc_id": "single:1:2", "text": "b", "chat_id": 1, "kind": "single", "n_msgs": 1, "date_min": "x", "date_max": "y"},
+            {
+                "doc_id": "thread:1:1",
+                "text": "a",
+                "chat_id": 1,
+                "kind": "thread",
+                "n_msgs": 2,
+                "date_min": "x",
+                "date_max": "y",
+            },
+            {
+                "doc_id": "single:1:2",
+                "text": "b",
+                "chat_id": 1,
+                "kind": "single",
+                "n_msgs": 1,
+                "date_min": "x",
+                "date_max": "y",
+            },
         ]
         with patch.object(rag, "embed_texts", return_value=[[0.0]]):
             written = rag.ingest(docs, coll, batch_size=8)
@@ -177,7 +273,17 @@ class TestIngest:
     def test_no_new_docs_returns_zero(self):
         coll = MagicMock()
         coll.get.return_value = {"ids": ["a", "b"]}
-        docs = [{"doc_id": "a", "text": "x", "chat_id": 1, "kind": "single", "n_msgs": 1, "date_min": "x", "date_max": "y"}]
+        docs = [
+            {
+                "doc_id": "a",
+                "text": "x",
+                "chat_id": 1,
+                "kind": "single",
+                "n_msgs": 1,
+                "date_min": "x",
+                "date_max": "y",
+            }
+        ]
         with patch.object(rag, "embed_texts") as et:
             written = rag.ingest(docs, coll)
             assert written == 0

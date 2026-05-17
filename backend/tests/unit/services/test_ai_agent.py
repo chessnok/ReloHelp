@@ -352,9 +352,7 @@ async def test_call_mcp_tool_injects_user_id_only_for_user_scoped(monkeypatch):
     await service._call_mcp_tool(
         "find_official_info", {"query": "q", "user_id": "model-hallucinated"}, uid
     )
-    await service._call_mcp_tool(
-        "search_telegram_chats", {"query": "q", "k": 3}, uid
-    )
+    await service._call_mcp_tool("search_telegram_chats", {"query": "q", "k": 3}, uid)
 
     assert captured_params["get_user_email"] == {"user_id": str(uid)}
     assert "user_id" not in captured_params["find_official_info"]
