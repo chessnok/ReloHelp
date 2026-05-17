@@ -1,5 +1,8 @@
 .env
 .venv/
+__marimo__/
+marimo/_static/
+marimo/_lsp/
 *.session
 *.session-journal
 __pycache__/

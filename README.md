@@ -16,19 +16,18 @@ https://www.notion.so/MVP-description-and-App-Architecture-3055ee5a340e80729cacc
 #### First run
 ```bash
 cd research/telegram_scrapper
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements.txt
-source .venv/bin/activate
+uv sync
+cp .env.example .env   # TELEGRAM_API_ID, TELEGRAM_API_HASH
 ```
-### Run single chat 
+#### Run single chat
 ```bash
 cd research/telegram_scrapper
-python export.py -1001350470024 --limit 1500 -o ./my_export.csv
+uv run python -m telegram_scrapper.export -1001350470024 --limit 1500 -o ./my_export.csv
 ```
-### Run multiple chats (from repo root)
+#### Run multiple chats
 ```bash
-python -m telegram_scrapper.batch_export \
+cd research/telegram_scrapper
+uv run python -m telegram_scrapper.batch_export \
   --force-rerun \
   --since-days 360 \
   --sleep-between-chats 15 \
@@ -39,13 +38,13 @@ python -m telegram_scrapper.batch_export \
 
 Per chat, effective row cap is `min(--limit, number_of_messages in chats.json)` when both are set. Logs: `research/telegram_scrapper/logging.ini` → console + `research/telegram_scrapper/logs/log.log`.
 
-
-### Check validity of csv
+#### Check CSV (marimo)
 ```bash
-python3 check_scv_readability.py
+cd research/telegram_scrapper
+uv run marimo edit notebooks/csv_readability.py
 ```
 
-Traceback (most recent call last):
+See `research/telegram_scrapper/docs.md` for CLI flags and export behavior.
 
 
 ## Setup

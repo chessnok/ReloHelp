@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 
 load_dotenv()
 
-_DEFAULT_CSV = Path(__file__).resolve().parent / "chat_export.csv"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_CSV = _PROJECT_ROOT / "chat_export.csv"
 
 # Defaults for throttling inside one chat (batch export); override via CLI.
 DEFAULT_SLEEP_BETWEEN_MESSAGES_NUMBER = 500
@@ -294,7 +295,7 @@ async def export_chat_to_csv(
     out = Path(csv_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    session_path = Path(__file__).resolve().parent / resolved_session
+    session_path = _PROJECT_ROOT / resolved_session
     client = TelegramClient(str(session_path), resolved_api_id, resolved_api_hash)
 
     fieldnames = CSV_FIELDNAMES
