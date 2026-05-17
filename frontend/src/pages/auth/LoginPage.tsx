@@ -123,7 +123,10 @@ export const LoginPage: React.FC = () => {
       <CardFooter className="flex flex-col items-center gap-3 pt-2">
         <p className="text-sm text-muted-stone">
           New to Relohelp?{" "}
-          <Link to="/register" className="text-ink underline-offset-4 hover:underline">
+          <Link
+            to="/register"
+            className="text-ink underline-offset-4 hover:underline"
+          >
             Create an account
           </Link>
         </p>

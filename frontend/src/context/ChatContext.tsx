@@ -1,4 +1,10 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 
 export type Message = { role: "user" | "assistant"; content: string };
 
@@ -57,7 +63,8 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [chats, setChats] = useState<ChatItem[]>(loadChats);
-  const [messagesByChatId, setMessagesByChatId] = useState<Record<string, Message[]>>(loadMessages);
+  const [messagesByChatId, setMessagesByChatId] =
+    useState<Record<string, Message[]>>(loadMessages);
 
   const createChat = useCallback(() => {
     const id = crypto.randomUUID();
@@ -91,7 +98,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const getMessages = useCallback(
     (chatId: string) => messagesByChatId[chatId] ?? [],
-    [messagesByChatId]
+    [messagesByChatId],
   );
 
   const addMessage = useCallback((chatId: string, message: Message) => {
@@ -103,15 +110,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const setConversationId = useCallback((chatId: string, conversationId: string) => {
-    setChats((prev) => {
-      const next = prev.map((c) =>
-        c.id === chatId ? { ...c, conversationId } : c
-      );
-      saveChats(next);
-      return next;
-    });
-  }, []);
+  const setConversationId = useCallback(
+    (chatId: string, conversationId: string) => {
+      setChats((prev) => {
+        const next = prev.map((c) =>
+          c.id === chatId ? { ...c, conversationId } : c,
+        );
+        saveChats(next);
+        return next;
+      });
+    },
+    [],
+  );
 
   const setChatTitle = useCallback((chatId: string, title: string) => {
     setChats((prev) => {
@@ -141,7 +151,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       addMessage,
       setConversationId,
       setChatTitle,
-    ]
+    ],
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

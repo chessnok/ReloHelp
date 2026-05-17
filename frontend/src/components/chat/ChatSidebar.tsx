@@ -43,7 +43,7 @@ export const ChatSidebar: React.FC = () => {
                   "group flex items-center gap-1 rounded-2xl text-[14px] transition-colors",
                   isActive
                     ? "bg-canvas text-ink shadow-[0_1px_2px_rgba(4,23,43,0.06)]"
-                    : "text-muted-stone hover:bg-canvas/60 hover:text-ink"
+                    : "text-muted-stone hover:bg-canvas/60 hover:text-ink",
                 )}
               >
                 <Link

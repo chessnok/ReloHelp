@@ -12,13 +12,8 @@ const MAX_TITLE_LENGTH = 50;
 
 export const ChatPage: React.FC = () => {
   const { chatId } = useParams<{ chatId: string }>();
-  const {
-    chats,
-    getMessages,
-    addMessage,
-    setConversationId,
-    setChatTitle,
-  } = useChat();
+  const { chats, getMessages, addMessage, setConversationId, setChatTitle } =
+    useChat();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +34,12 @@ export const ChatPage: React.FC = () => {
     setError(null);
     addMessage(chatId, { role: "user", content: text });
     if (chatItem?.title === "New chat") {
-      setChatTitle(chatId, text.length > MAX_TITLE_LENGTH ? text.slice(0, MAX_TITLE_LENGTH) + "…" : text);
+      setChatTitle(
+        chatId,
+        text.length > MAX_TITLE_LENGTH
+          ? text.slice(0, MAX_TITLE_LENGTH) + "…"
+          : text,
+      );
     }
     setLoading(true);
     try {
@@ -48,14 +48,31 @@ export const ChatPage: React.FC = () => {
       addMessage(chatId, { role: "assistant", content: res.response });
     } catch (e) {
       const message =
-        e && typeof e === "object" && "response" in e && e.response && typeof e.response === "object" && "data" in e.response && e.response.data && typeof e.response.data === "object" && "detail" in e.response.data
+        e &&
+        typeof e === "object" &&
+        "response" in e &&
+        e.response &&
+        typeof e.response === "object" &&
+        "data" in e.response &&
+        e.response.data &&
+        typeof e.response.data === "object" &&
+        "detail" in e.response.data
           ? String((e.response.data as { detail: unknown }).detail)
           : "Something went wrong. Please try again.";
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [input, loading, chatId, conversationId, chatItem?.title, addMessage, setConversationId, setChatTitle]);
+  }, [
+    input,
+    loading,
+    chatId,
+    conversationId,
+    chatItem?.title,
+    addMessage,
+    setConversationId,
+    setChatTitle,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -86,20 +103,20 @@ export const ChatPage: React.FC = () => {
               key={i}
               className={cn(
                 "group flex gap-3 py-3",
-                m.role === "user" ? "justify-end" : "justify-start"
+                m.role === "user" ? "justify-end" : "justify-start",
               )}
             >
               {m.role === "assistant" && (
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-warm-mist text-terracotta">
-                  <span className="text-[11px] font-medium tracking-wide">AI</span>
+                  <span className="text-[11px] font-medium tracking-wide">
+                    AI
+                  </span>
                 </div>
               )}
               <div
                 className={cn(
                   "max-w-[85%] rounded-3xl px-5 py-3 text-[15px] leading-[1.55]",
-                  m.role === "user"
-                    ? "bg-ink text-canvas"
-                    : "bg-fog text-ink"
+                  m.role === "user" ? "bg-ink text-canvas" : "bg-fog text-ink",
                 )}
               >
                 <p className="whitespace-pre-wrap">{m.content}</p>
@@ -114,7 +131,9 @@ export const ChatPage: React.FC = () => {
           {loading && (
             <div className="flex gap-3 py-3">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-warm-mist text-terracotta">
-                <span className="text-[11px] font-medium tracking-wide">AI</span>
+                <span className="text-[11px] font-medium tracking-wide">
+                  AI
+                </span>
               </div>
               <div className="flex items-center gap-2 rounded-3xl bg-fog px-5 py-3">
                 <Loader2 className="size-4 animate-spin text-muted-stone" />

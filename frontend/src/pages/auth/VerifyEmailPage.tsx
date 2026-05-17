@@ -90,9 +90,7 @@ export const VerifyEmailPage: React.FC = () => {
       </CardContent>
       {status === "success" && (
         <CardFooter className="flex justify-center pt-2">
-          <p className="text-sm text-muted-stone">
-            Redirecting to sign in…
-          </p>
+          <p className="text-sm text-muted-stone">Redirecting to sign in…</p>
         </CardFooter>
       )}
       {status === "error" && (

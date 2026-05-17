@@ -32,4 +32,4 @@ export const ChatIndexPage: React.FC = () => {
       </Button>
     </div>
   );
-}
+};

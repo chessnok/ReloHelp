@@ -72,9 +72,7 @@ export const RegisterPage: React.FC = () => {
     <Card className="w-full">
       <CardHeader>
         <CardTitle>Create your account</CardTitle>
-        <CardDescription>
-          Start planning your move in minutes
-        </CardDescription>
+        <CardDescription>Start planning your move in minutes</CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
@@ -144,7 +142,9 @@ export const RegisterPage: React.FC = () => {
               className="w-full"
               disabled={form.formState.isSubmitting}
             >
-              {form.formState.isSubmitting ? "Creating account…" : "Create account"}
+              {form.formState.isSubmitting
+                ? "Creating account…"
+                : "Create account"}
             </Button>
           </form>
         </Form>
@@ -152,7 +152,10 @@ export const RegisterPage: React.FC = () => {
       <CardFooter className="flex justify-center pt-2">
         <p className="text-sm text-muted-stone">
           Already have an account?{" "}
-          <Link to="/login" className="text-ink underline-offset-4 hover:underline">
+          <Link
+            to="/login"
+            className="text-ink underline-offset-4 hover:underline"
+          >
             Sign in
           </Link>
         </p>

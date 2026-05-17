@@ -9,16 +9,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default:
-          "bg-ink text-canvas hover:bg-ink/90 active:bg-ink/80",
+        default: "bg-ink text-canvas hover:bg-ink/90 active:bg-ink/80",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/30",
         outline:
           "border border-ink bg-transparent text-ink hover:bg-ink hover:text-canvas",
-        secondary:
-          "bg-fog text-ink hover:bg-fog/70",
-        ghost:
-          "text-ink hover:bg-fog",
+        secondary: "bg-fog text-ink hover:bg-fog/70",
+        ghost: "text-ink hover:bg-fog",
         link: "text-ink underline-offset-4 hover:underline rounded-none px-0",
       },
       size: {
