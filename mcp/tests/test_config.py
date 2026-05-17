@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from app.config import Settings, settings
+import pytest
+from pydantic import ValidationError
+
+from app.config import FIRECRAWL_HARD_MAX_LIMIT, Settings, settings
 
 
 class TestSettings:
@@ -54,3 +57,27 @@ class TestSettings:
         monkeypatch.setenv("SOME_UNRELATED_VAR", "value")
         s = Settings(_env_file=None)
         assert not hasattr(s, "SOME_UNRELATED_VAR")
+
+
+class TestFirecrawlValidation:
+    @pytest.mark.parametrize("bad", [0, -1, -10])
+    def test_rejects_non_positive_search_limit(self, monkeypatch, bad):
+        monkeypatch.setenv("FIRECRAWL_SEARCH_LIMIT", str(bad))
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None)
+
+    def test_rejects_search_limit_over_hard_max(self, monkeypatch):
+        monkeypatch.setenv("FIRECRAWL_SEARCH_LIMIT", str(FIRECRAWL_HARD_MAX_LIMIT + 1))
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None)
+
+    def test_accepts_search_limit_at_hard_max(self, monkeypatch):
+        monkeypatch.setenv("FIRECRAWL_SEARCH_LIMIT", str(FIRECRAWL_HARD_MAX_LIMIT))
+        s = Settings(_env_file=None)
+        assert s.FIRECRAWL_SEARCH_LIMIT == FIRECRAWL_HARD_MAX_LIMIT
+
+    @pytest.mark.parametrize("bad", [0, -0.5, -10])
+    def test_rejects_non_positive_timeout(self, monkeypatch, bad):
+        monkeypatch.setenv("FIRECRAWL_TIMEOUT_SECONDS", str(bad))
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None)

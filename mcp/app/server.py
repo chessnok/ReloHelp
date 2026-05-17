@@ -9,7 +9,7 @@ from uuid import UUID
 import httpx
 from fastmcp import FastMCP
 
-from app.config import settings
+from app.config import FIRECRAWL_HARD_MAX_LIMIT, settings
 
 SYSTEM_INSTRUCTIONS = """\
 You are the Relohelp relocation assistant.
@@ -105,7 +105,11 @@ async def find_official_info(query: str, limit: int | None = None) -> dict:
             "error": "Firecrawl is not configured (FIRECRAWL_API_KEY missing)",
         }
 
-    effective_limit = limit if limit and limit > 0 else settings.FIRECRAWL_SEARCH_LIMIT
+    settings_cap = min(settings.FIRECRAWL_SEARCH_LIMIT, FIRECRAWL_HARD_MAX_LIMIT)
+    if isinstance(limit, int) and limit > 0:
+        effective_limit = min(limit, settings_cap)
+    else:
+        effective_limit = settings_cap
 
     url = f"{settings.FIRECRAWL_API_URL.rstrip('/')}/v1/search"
     payload = {
@@ -143,16 +147,61 @@ async def find_official_info(query: str, limit: int | None = None) -> dict:
     except ValueError:
         return {"results": [], "error": "Invalid Firecrawl response"}
 
-    raw_results = body.get("data") or body.get("results") or []
+    if isinstance(body, dict) and body.get("success") is False:
+        err_msg = body.get("error") or body.get("message") or "unknown error"
+        return {"results": [], "error": f"Firecrawl returned failure: {err_msg}"}
+
+    raw_results = _extract_search_items(body)
     normalized = [
-        {
-            "url": item.get("url", ""),
-            "title": item.get("title", ""),
-            "description": item.get("description", ""),
-            "markdown": item.get("markdown", ""),
-        }
-        for item in raw_results
-        if isinstance(item, dict)
+        _normalize_search_item(item) for item in raw_results if isinstance(item, dict)
     ]
 
     return {"results": normalized}
+
+
+def _extract_search_items(body: dict) -> list:
+    """Normalize v1 (flat) and v2 (nested data['web']) Firecrawl payloads."""
+    data = body.get("data")
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        # v2 shape: data = {"web": [...], "news": [...], ...}
+        merged: list = []
+        for value in data.values():
+            if isinstance(value, list):
+                merged.extend(value)
+        if merged:
+            return merged
+    results = body.get("results")
+    if isinstance(results, list):
+        return results
+    return []
+
+
+def _normalize_search_item(item: dict) -> dict:
+    raw_metadata = item.get("metadata")
+    metadata: dict = raw_metadata if isinstance(raw_metadata, dict) else {}
+    published = (
+        item.get("publishedDate")
+        or item.get("published_date")
+        or metadata.get("publishedDate")
+        or metadata.get("published_date")
+        or metadata.get("article:published_time")
+        or ""
+    )
+    updated = (
+        item.get("updatedDate")
+        or item.get("updated_date")
+        or metadata.get("updatedDate")
+        or metadata.get("updated_date")
+        or metadata.get("article:modified_time")
+        or ""
+    )
+    return {
+        "url": item.get("url", ""),
+        "title": item.get("title", "") or metadata.get("title", ""),
+        "description": item.get("description", "") or metadata.get("description", ""),
+        "markdown": item.get("markdown", ""),
+        "publishedDate": published,
+        "updatedDate": updated,
+    }

@@ -172,6 +172,8 @@ class TestFindOfficialInfoHappyPath:
             "title": "",
             "description": "",
             "markdown": "",
+            "publishedDate": "",
+            "updatedDate": "",
         }
 
     @respx.mock
@@ -258,3 +260,185 @@ class TestFindOfficialInfoErrors:
 
         result = await find_official_info("q")
         assert result == {"results": []}
+
+    @respx.mock
+    async def test_success_false_on_200_returns_error(self, mcp_settings):
+        respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={"success": False, "error": "internal blew up", "data": []},
+            )
+        )
+
+        result = await find_official_info("q")
+        assert result["results"] == []
+        assert "internal blew up" in result["error"]
+
+    @respx.mock
+    async def test_success_false_without_error_field(self, mcp_settings):
+        respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(200, json={"success": False})
+        )
+
+        result = await find_official_info("q")
+        assert result["results"] == []
+        assert "Firecrawl returned failure" in result["error"]
+
+
+class TestFindOfficialInfoV2Shape:
+    @respx.mock
+    async def test_nested_data_web_array(self, mcp_settings):
+        """v2 shape: data is an object with a 'web' array."""
+        respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "success": True,
+                    "data": {
+                        "web": [
+                            {"url": "https://gov.example/a", "title": "A"},
+                            {"url": "https://gov.example/b", "title": "B"},
+                        ]
+                    },
+                },
+            )
+        )
+
+        result = await find_official_info("q")
+        assert len(result["results"]) == 2
+        assert result["results"][0]["url"] == "https://gov.example/a"
+
+    @respx.mock
+    async def test_body_without_data_or_results(self, mcp_settings):
+        """Defensive: payload missing both 'data' and 'results' → empty list."""
+        respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(200, json={"success": True})
+        )
+
+        result = await find_official_info("q")
+        assert result == {"results": []}
+
+    @respx.mock
+    async def test_nested_data_multiple_buckets(self, mcp_settings):
+        """v2 shape: data may contain web + news arrays — merge all."""
+        respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "web": [{"url": "https://w"}],
+                        "news": [{"url": "https://n"}],
+                    },
+                },
+            )
+        )
+
+        result = await find_official_info("q")
+        urls = {r["url"] for r in result["results"]}
+        assert urls == {"https://w", "https://n"}
+
+
+class TestFindOfficialInfoDates:
+    @respx.mock
+    async def test_published_and_updated_top_level(self, mcp_settings):
+        respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "url": "https://gov.example",
+                            "publishedDate": "2026-01-15",
+                            "updatedDate": "2026-03-01",
+                        }
+                    ]
+                },
+            )
+        )
+
+        result = await find_official_info("q")
+        assert result["results"][0]["publishedDate"] == "2026-01-15"
+        assert result["results"][0]["updatedDate"] == "2026-03-01"
+
+    @respx.mock
+    async def test_dates_from_metadata(self, mcp_settings):
+        respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "url": "https://gov.example",
+                            "metadata": {
+                                "article:published_time": "2026-02-01T00:00:00Z",
+                                "article:modified_time": "2026-02-10T00:00:00Z",
+                            },
+                        }
+                    ]
+                },
+            )
+        )
+
+        result = await find_official_info("q")
+        assert result["results"][0]["publishedDate"] == "2026-02-01T00:00:00Z"
+        assert result["results"][0]["updatedDate"] == "2026-02-10T00:00:00Z"
+
+    @respx.mock
+    async def test_metadata_title_fallback(self, mcp_settings):
+        respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "url": "https://gov.example",
+                            "metadata": {
+                                "title": "Meta Title",
+                                "description": "Meta Desc",
+                            },
+                        }
+                    ]
+                },
+            )
+        )
+
+        result = await find_official_info("q")
+        assert result["results"][0]["title"] == "Meta Title"
+        assert result["results"][0]["description"] == "Meta Desc"
+
+
+class TestFindOfficialInfoLimitCap:
+    @respx.mock
+    async def test_user_limit_capped_by_settings(self, mcp_settings):
+        """User-provided limit cannot exceed FIRECRAWL_SEARCH_LIMIT (3 in fixture)."""
+        route = respx.post(FIRECRAWL_SEARCH_URL).mock(
+            return_value=httpx.Response(200, json={"data": []})
+        )
+
+        await find_official_info("q", limit=50)
+
+        body = json.loads(route.calls.last.request.content)
+        assert body["limit"] == 3
+
+    @respx.mock
+    async def test_hard_cap_at_100(self, monkeypatch):
+        """If settings allow more than 100, hard cap kicks in."""
+        from app import server as server_module
+        from app.config import Settings
+
+        s = Settings(
+            FIRECRAWL_API_KEY="k",
+            FIRECRAWL_API_URL="http://firecrawl.test",
+            FIRECRAWL_TIMEOUT_SECONDS=1.0,
+            FIRECRAWL_SEARCH_LIMIT=100,
+        )
+        monkeypatch.setattr(server_module, "settings", s)
+
+        route = respx.post("http://firecrawl.test/v1/search").mock(
+            return_value=httpx.Response(200, json={"data": []})
+        )
+
+        await find_official_info("q", limit=500)
+
+        body = json.loads(route.calls.last.request.content)
+        assert body["limit"] == 100
