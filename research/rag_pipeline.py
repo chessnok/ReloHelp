@@ -12,7 +12,7 @@ def _():
 
     **Pipeline**: CSV → thread reconstruction → ollama `mxbai-embed-large` → ChromaDB.
 
-    **Caveat**: `merged.csv` only has `reply_to`, no own `msg_id`. True parent→reply chain reconstruction is impossible.
+    **Caveat**: `merged.csv` only has `reply_to`, no own `msg_id`. True parent→reply chain reconstruction is impossible. msg_id will be added.
     Workaround: group by `(chat_id, reply_to)` siblings; standalone msgs (no `reply_to`) = own doc.
     For real threads, patch `telegram_scrapper/export.py` to also write `message.id`.
     """)
