@@ -113,7 +113,9 @@ describe("auth pages", () => {
       screen.getByLabelText("Confirm Password"),
       "different",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create account" }),
+    );
 
     expect(
       await screen.findByText("Invalid email address"),
@@ -132,7 +134,9 @@ describe("auth pages", () => {
       screen.getByLabelText("Confirm Password"),
       "password123",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create account" }),
+    );
 
     await waitFor(() =>
       expect(authMock.register).toHaveBeenCalledWith({
@@ -153,7 +157,9 @@ describe("auth pages", () => {
       screen.getByLabelText("Confirm Password"),
       "password123",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create account" }),
+    );
 
     expect(await screen.findByText("Failed to register")).toBeInTheDocument();
   });
