@@ -12,9 +12,7 @@ def _():
 
     **Pipeline**: CSV → thread reconstruction → ollama `mxbai-embed-large` → ChromaDB.
 
-    **Caveat**: `merged.csv` only has `reply_to`, no own `msg_id`. True parent→reply chain reconstruction is impossible. msg_id will be added.
-    Workaround: group by `(chat_id, reply_to)` siblings; standalone msgs (no `reply_to`) = own doc.
-    For real threads, patch `telegram_scrapper/export.py` to also write `message.id`.
+    **Approach**: `merged.csv` has `msg_id` and `reply_to`. Siblings sharing `(chat_id, reply_to)` are merged into one thread doc; standalone msgs (no `reply_to`) become their own doc keyed by `msg_id`.
     """)
     return
 
@@ -73,8 +71,10 @@ def _():
             "date_max": standalone.date_created.values,
             "kind": "single",
         })
+        standalone_out["msg_id"] = standalone.msg_id.values
         standalone_out["doc_id"] = [
-            f"single:{cid}:{idx}" for idx, cid in zip(standalone.index, standalone.chat_id.values)
+            f"single:{int(cid)}:{int(mid)}"
+            for cid, mid in zip(standalone.chat_id.values, standalone.msg_id.values)
         ]
 
         out = pd.concat([grouped, standalone_out], ignore_index=True)
@@ -201,9 +201,8 @@ def _():
     - **Test**: 50 docs ingested, query returns relevant hits.
 
     ### Limits
-    1. No msg_id in CSV => true parent-reply impossible. Patch telegram_scrapper/export.py.
-    2. 600-char trim loses info => consider chunk+mean-pool.
-    3. Run full ingest: set n_test_sample=None.
+    1. 600-char trim loses info => consider chunk+mean-pool.
+    2. Run full ingest: set n_test_sample=None.
     """)
     return
 
