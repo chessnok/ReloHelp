@@ -16,7 +16,7 @@ export function renderWithRouter(
 export const testUser = {
   id: "user-1",
   email: "person@example.com",
-  is_active: "true",
+  is_active: true,
   roles: ["user"],
   email_is_verified: true,
 };
