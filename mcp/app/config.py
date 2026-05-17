@@ -13,5 +13,10 @@ class Settings(BaseSettings):
     INTERNAL_API_TOKEN: str | None = None
     REQUEST_TIMEOUT_SECONDS: float = 5.0
 
+    FIRECRAWL_API_KEY: str | None = None
+    FIRECRAWL_API_URL: str = "https://api.firecrawl.dev"
+    FIRECRAWL_TIMEOUT_SECONDS: float = 30.0
+    FIRECRAWL_SEARCH_LIMIT: int = 5
+
 
 settings = Settings()
