@@ -72,7 +72,7 @@ describe("AI chat pages", () => {
 
     expect(screen.getByText("Saved answer")).toBeInTheDocument();
     await userEvent.type(
-      screen.getByPlaceholderText("Message…"),
+      screen.getByPlaceholderText("Message Relohelp…"),
       "What should I do?",
     );
     await userEvent.click(screen.getByRole("button", { name: "Send message" }));
@@ -105,7 +105,7 @@ describe("AI chat pages", () => {
     );
 
     renderChat("/chat/chat-1", <ChatPage />);
-    const input = screen.getByPlaceholderText("Message…");
+    const input = screen.getByPlaceholderText("Message Relohelp…");
     await userEvent.type(input, "first line{shift>}{enter}{/shift}second line");
     expect(input).toHaveValue("first line\nsecond line");
 

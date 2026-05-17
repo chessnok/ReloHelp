@@ -71,7 +71,7 @@ describe("auth pages", () => {
   it("validates and submits the login form", async () => {
     renderAuthPage(<LoginPage />, "/login", "/login");
 
-    await userEvent.click(screen.getByRole("button", { name: "Login" }));
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(
       await screen.findByText("Invalid email address"),
     ).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe("auth pages", () => {
 
     await userEvent.type(screen.getByLabelText("Email"), "person@example.com");
     await userEvent.type(screen.getByLabelText("Password"), "password123");
-    await userEvent.click(screen.getByRole("button", { name: "Login" }));
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     await waitFor(() =>
       expect(authMock.login).toHaveBeenCalledWith({
@@ -99,7 +99,7 @@ describe("auth pages", () => {
     renderAuthPage(<LoginPage />, "/login", "/login");
     await userEvent.type(screen.getByLabelText("Email"), "person@example.com");
     await userEvent.type(screen.getByLabelText("Password"), "wrong");
-    await userEvent.click(screen.getByRole("button", { name: "Login" }));
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByText("Bad credentials")).toBeInTheDocument();
   });
@@ -113,7 +113,7 @@ describe("auth pages", () => {
       screen.getByLabelText("Confirm Password"),
       "different",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Register" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
 
     expect(
       await screen.findByText("Invalid email address"),
@@ -132,7 +132,7 @@ describe("auth pages", () => {
       screen.getByLabelText("Confirm Password"),
       "password123",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Register" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
 
     await waitFor(() =>
       expect(authMock.register).toHaveBeenCalledWith({
@@ -153,7 +153,7 @@ describe("auth pages", () => {
       screen.getByLabelText("Confirm Password"),
       "password123",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Register" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
 
     expect(await screen.findByText("Failed to register")).toBeInTheDocument();
   });
@@ -172,7 +172,7 @@ describe("auth pages", () => {
 
     await userEvent.type(screen.getByLabelText("Email"), "person@example.com");
     await userEvent.click(
-      screen.getByRole("button", { name: "Send Reset Link" }),
+      screen.getByRole("button", { name: "Send reset link" }),
     );
 
     expect(await screen.findByText("Check your email")).toBeInTheDocument();
@@ -195,7 +195,7 @@ describe("auth pages", () => {
       "missing@example.com",
     );
     await userEvent.click(
-      screen.getAllByRole("button", { name: "Send Reset Link" })[0],
+      screen.getAllByRole("button", { name: "Send reset link" })[0],
     );
     expect(await screen.findByText("Unknown email")).toBeInTheDocument();
   });
@@ -223,13 +223,13 @@ describe("auth pages", () => {
       "password123",
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Reset Password" }),
+      screen.getByRole("button", { name: "Reset password" }),
     );
     expect(await screen.findByText("Login destination")).toBeInTheDocument();
     unmount();
 
     renderAuthPage(<ResetPasswordPage />, "/reset-password", "/reset-password");
-    expect(screen.getByText("Invalid Link")).toBeInTheDocument();
+    expect(screen.getByText("Invalid link")).toBeInTheDocument();
   });
 
   it("shows reset-password API errors", async () => {
@@ -250,7 +250,7 @@ describe("auth pages", () => {
       "password123",
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Reset Password" }),
+      screen.getByRole("button", { name: "Reset password" }),
     );
 
     expect(await screen.findByText("Expired token")).toBeInTheDocument();
@@ -268,10 +268,8 @@ describe("auth pages", () => {
       "/verify-email?token=verify-token",
       "/verify-email",
     );
-    expect(screen.getByText("Verifying...")).toBeInTheDocument();
-    expect(
-      await screen.findByText("Email verified successfully!"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Verifying…")).toBeInTheDocument();
+    expect(await screen.findByText("Email verified")).toBeInTheDocument();
     unmount();
 
     renderAuthPage(<VerifyEmailPage />, "/verify-email", "/verify-email");

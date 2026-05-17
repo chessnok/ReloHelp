@@ -33,7 +33,7 @@ describe("App routing", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" }),
+      await screen.findByRole("heading", { name: /Your move/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Welcome, person@example.com/)).toBeInTheDocument();
   });
@@ -51,6 +51,6 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("Forgot Password")).toBeInTheDocument();
+    expect(await screen.findByText("Reset your password")).toBeInTheDocument();
   });
 });
