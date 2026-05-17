@@ -13,7 +13,7 @@ From the repo root:
 python -m telegram_scrapper.batch_export --help
 ```
 
-- **`chats.json`**: `chats[]` entries include `last_parse_date` (UTC when the job finished that chat), `parsed_messages` (row count written in that run), `oldest_parsed_message_date` and `newest_parsed_message_date` (UTC bounds among those rows; `null` if none).
+- **`chats.json`**: `chats[]` entries include `last_parse_date` (UTC when the job finished that chat), `parsed_messages` (row count written in that run), `oldest_parsed_message_date` and `newest_parsed_message_date` (UTC bounds among **history** rows only; pinned/linked posts are excluded so old pins do not skew `oldest`).
 - **`--limit N`**: CLI cap. **Per-chat effective limit:** `min(N, number_of_messages)` when JSON has a per-chat limit; if JSON has none, `N` is used alone.
 - **`--since-days D`**: only messages with `date >= now(UTC) - D days`. Startup logs include the **equivalent calendar day** as if you had passed `--until-date YYYY-MM-DD` (UTC).
 - **`--until-date YYYY-MM-DD`**: only messages with `date >=` that calendar day at **UTC midnight**.
@@ -21,9 +21,11 @@ python -m telegram_scrapper.batch_export --help
 - If **both** a date floor and `--limit` are in effect, iteration stops when **either** condition hits first.
 - If none of `--limit`, `--since-days`, `--until-date`, and JSON `number_of_messages` apply, the program exits with an error.
 - **`--sleep-between-chats`**: seconds between chats (default `60`).
-- Inside one chat: pause **10 s** every **500** messages (`export.py`: `INTER_BATCH_MESSAGE_COUNT`, `INTER_BATCH_SLEEP_SEC`).
-- If `last_parse_date` is **< 10 days** old, the chat is skipped (logged).
+- **`--sleep-between-messages-number`**: pause every N messages in one chat (default `500`; `0` = off).
+- **`--sleep-between-messages-duration`**: pause length in seconds (default `10`).
+- If `last_parse_date` is **< 10 days** old, the chat is skipped (logged), unless **`--force-rerun`** is set.
 - Errors on one chat are logged; the loop **continues**.
+- Merged CSV columns: `text_or_caption`, `msg_id`, `reply_to`, `chat_id`, `date_created`.
 
 ## Logging
 
@@ -35,7 +37,7 @@ Custom ini: `--logging-config /path/to.ini`. File handler args: `args=("%(logfil
 
 ## Pinned messages
 
-Up to **5** pinned messages are requested first (`InputMessagePinned` and `pinned_msg_id` from full channel/chat). Telegram often exposes a **single** “main” pin; multiple independent pins are not always returned as a list.
+Up to **10** pinned messages are fetched first (`InputMessagesFilterPinned` when available, then fallbacks). If a pin contains **t.me links to posts in the same channel**, those posts are fetched and exported too (hub posts often hold the most relevant info).
 
 ## Useful channel
 

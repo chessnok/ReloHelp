@@ -9,6 +9,7 @@ over HTTP — does **not** access the database directly.
 |---|---|
 | `get_user_email` | Returns the authenticated user's email (backend-injected `user_id`). |
 | `search_telegram_chats` | Top-k semantic search over indexed Telegram relocation/visa chats. Hits include `chat_id`, `date_min`, `date_max` for source attribution. |
+| `find_official_info` | Firecrawl-backed web search for fresh, official sources (visas, taxes, regulations). |
 
 ## Environment
 
@@ -25,6 +26,19 @@ over HTTP — does **not** access the database directly.
 | `OLLAMA_EMBED_MODEL` | `mxbai-embed-large` | Embedding model name |
 | `RAG_DEFAULT_K` | `5` | Default top-k |
 | `RAG_MAX_K` | `20` | Hard ceiling on `k` |
+| `FIRECRAWL_API_KEY` | _(unset)_ | API key for Firecrawl (`find_official_info` tool is disabled until set) |
+| `FIRECRAWL_API_URL` | `https://api.firecrawl.dev` | Firecrawl base URL. Override for self-hosted |
+| `FIRECRAWL_TIMEOUT_SECONDS` | `30.0` | Firecrawl request timeout |
+| `FIRECRAWL_SEARCH_LIMIT` | `5` | Default max results per `find_official_info` call |
+
+## Firecrawl setup
+
+`find_official_info` powers fresh, official web lookups (visas, taxes, regulations). Two options:
+
+- **Cloud** — sign up at [firecrawl.dev](https://firecrawl.dev), grab an API key, set `FIRECRAWL_API_KEY`.
+- **Self-hosted** — follow the official guide: <https://github.com/firecrawl/firecrawl/blob/main/SELF_HOST.md>. Point `FIRECRAWL_API_URL` at your instance and set `FIRECRAWL_API_KEY` to its configured token.
+
+The MCP server enforces (via `instructions`) that the agent rely **only on new and official sources**.
 
 ## Run locally
 
