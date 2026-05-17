@@ -17,17 +17,17 @@ https://www.notion.so/MVP-description-and-App-Architecture-3055ee5a340e80729cacc
 
 ## Repository layout
 
-| Path | Purpose |
-|---|---|
-| `backend/` | FastAPI app — auth, chat, MCP client |
-| `frontend/` | React 19 + Vite SPA, served by Nginx in compose |
-| `mcp/` | Standalone FastMCP server (agent tools) |
-| `research/` | RAG pipeline (marimo notebook) + Telegram scraper |
-| `research/telegram_scrapper/` | Telethon export scripts (`export.py`, `batch_export.py`) |
-| `research/rag_pipeline.py` | marimo notebook: CSV → threads → ollama embeddings → ChromaDB |
-| `docker-compose.yml` | Orchestrates backend, mcp, db, nginx |
-| `.env.example` | Root env (compose interpolation: shared token, RAG vars) |
-| `backend/.env.example` | Backend runtime config (DB, Resend, OpenAI, Langfuse, MCP URL) |
+| Path                          | Purpose                                                        |
+| ----------------------------- | -------------------------------------------------------------- |
+| `backend/`                    | FastAPI app — auth, chat, MCP client                           |
+| `frontend/`                   | React 19 + Vite SPA, served by Nginx in compose                |
+| `mcp/`                        | Standalone FastMCP server (agent tools)                        |
+| `research/`                   | RAG pipeline (marimo notebook) + Telegram scraper              |
+| `research/telegram_scrapper/` | Telethon export scripts (`export.py`, `batch_export.py`)       |
+| `research/rag_pipeline.py`    | marimo notebook: CSV → threads → ollama embeddings → ChromaDB  |
+| `docker-compose.yml`          | Orchestrates backend, mcp, db, nginx                           |
+| `.env.example`                | Root env (compose interpolation: shared token, RAG vars)       |
+| `backend/.env.example`        | Backend runtime config (DB, Resend, OpenAI, Langfuse, MCP URL) |
 
 ## Setup
 
