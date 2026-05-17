@@ -9,7 +9,7 @@ import { defineConfig } from "eslint/config";
 
 export default defineConfig([
   {
-    ignores: ["dist", "node_modules"],
+    ignores: ["coverage", "dist", "node_modules"],
   },
   {
     files: ["**/*.{ts,tsx,js,jsx}"],

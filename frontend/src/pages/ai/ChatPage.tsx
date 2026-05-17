@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useParams } from "react-router-dom";
 import { Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +26,10 @@ export const ChatPage: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const chatItem = chatId ? chats.find((c) => c.id === chatId) : null;
-  const messages = chatId ? getMessages(chatId) : [];
+  const messages = useMemo(
+    () => (chatId ? getMessages(chatId) : []),
+    [chatId, getMessages],
+  );
   const conversationId = chatItem?.conversationId ?? null;
 
   useEffect(() => {
