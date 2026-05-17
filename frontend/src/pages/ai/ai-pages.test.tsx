@@ -86,6 +86,39 @@ describe("AI chat pages", () => {
     );
   });
 
+  it("renders assistant message content as Markdown but user content as plain text", async () => {
+    localStorage.setItem(
+      "relohelp_chats",
+      JSON.stringify([
+        { id: "chat-1", title: "Saved", conversationId: null, createdAt: 1 },
+      ]),
+    );
+    localStorage.setItem(
+      "relohelp_chat_messages",
+      JSON.stringify({
+        "chat-1": [
+          { role: "user", content: "**user bold**" },
+          {
+            role: "assistant",
+            content:
+              "Try **this**:\n\n- step 1\n- step 2\n\n[docs](https://example.org)",
+          },
+        ],
+      }),
+    );
+
+    renderChat("/chat/chat-1", <ChatPage />);
+
+    expect(screen.getByText("**user bold**")).toBeInTheDocument();
+
+    expect(screen.getByText("this").tagName).toBe("STRONG");
+    expect(screen.getByText("step 1").closest("ul")).not.toBeNull();
+    const link = screen.getByRole("link", { name: "docs" });
+    expect(link.getAttribute("href")).toBe("https://example.org");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
   it("submits with Enter, allows Shift+Enter, and renders API errors", async () => {
     localStorage.setItem(
       "relohelp_chats",
