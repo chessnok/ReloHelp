@@ -24,14 +24,14 @@ from telethon.tl.custom.message import Message
 from telethon.tl.types import Channel, Chat
 
 from .export import (
-    INTER_BATCH_MESSAGE_COUNT,
-    INTER_BATCH_SLEEP_SEC,
-    _chat_id,
+    CSV_FIELDNAMES,
+    DEFAULT_SLEEP_BETWEEN_MESSAGES_DURATION_SEC,
+    DEFAULT_SLEEP_BETWEEN_MESSAGES_NUMBER,
     _date_created_iso,
     _env_int,
-    _message_text_or_caption,
-    _reply_to_id,
     coerce_chat_entity,
+    fetch_linked_channel_posts,
+    write_message_row,
     write_messages_from_peer,
 )
 
@@ -45,7 +45,7 @@ _DEFAULT_MERGED_CSV = _DIR / "merged_chat_export.csv"
 SKIP_IF_PARSED_WITHIN_DAYS = 10
 
 # Fetch at most this many pinned messages before the main history pass.
-MAX_PINNED_TO_FETCH = 5
+MAX_PINNED_TO_FETCH = 10
 
 LOG = logging.getLogger("telegram_scrapper.batch")
 
@@ -149,9 +149,10 @@ def log_date_floor_settings(
 
 async def collect_pinned_messages(client: TelegramClient, entity: Any, max_pins: int) -> list[Message]:
     """
-    Best-effort pinned messages. Telegram often exposes a single ``pinned_msg_id``
-    on full chat/channel; ``InputMessagePinned`` may return the top pin. True
-    multi-pin lists are not always available through the same MTProto surface.
+    Best-effort pinned messages (up to ``max_pins``).
+
+    Prefer ``iter_messages`` with ``InputMessagesFilterPinned`` when the layer
+    supports multiple pins; fall back to ``InputMessagePinned`` / full-chat pin id.
     """
     out: list[Message] = []
     seen: set[int] = set()
@@ -160,6 +161,18 @@ async def collect_pinned_messages(client: TelegramClient, entity: Any, max_pins:
         if m and isinstance(m, Message) and m.id not in seen:
             seen.add(m.id)
             out.append(m)
+
+    try:
+        from telethon.tl.types import InputMessagesFilterPinned
+
+        async for m in client.iter_messages(
+            entity, filter=InputMessagesFilterPinned(), limit=max_pins
+        ):
+            take(m)
+        if out:
+            return out[:max_pins]
+    except Exception as e:
+        LOG.debug("InputMessagesFilterPinned iter failed: %s", e)
 
     try:
         res = await client.get_messages(entity, ids=types.InputMessagePinned())
@@ -264,7 +277,7 @@ async def run_batch(args: argparse.Namespace) -> None:
 
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     delimiter = "\t" if args.tsv else ","
-    fieldnames = ("text_or_caption", "reply_to", "chat_id", "date_created")
+    fieldnames = CSV_FIELDNAMES
 
     await client.start()
     try:
@@ -279,7 +292,11 @@ async def run_batch(args: argparse.Namespace) -> None:
                 last_dt = parse_iso_date(str(last_raw) if last_raw is not None else None)
                 now = datetime.now(timezone.utc)
 
-                if last_dt is not None and (now - last_dt) < timedelta(days=SKIP_IF_PARSED_WITHIN_DAYS):
+                if (
+                    not args.force_rerun
+                    and last_dt is not None
+                    and (now - last_dt) < timedelta(days=SKIP_IF_PARSED_WITHIN_DAYS)
+                ):
                     LOG.info(
                         "Skip %s (%s): last_parse_date=%s (< %s days ago)",
                         name,
@@ -310,48 +327,37 @@ async def run_batch(args: argparse.Namespace) -> None:
                 t0 = datetime.now(timezone.utc)
                 seen_ids: set[int] = set()
                 rows_pins = 0
-                newest: datetime | None = None
-                oldest: datetime | None = None
-
                 rows_hist = 0
-                nh: datetime | None = None
-                oh: datetime | None = None
+                newest_hist: datetime | None = None
+                oldest_hist: datetime | None = None
 
                 try:
                     entity = await client.get_entity(peer)
 
                     pinned = await collect_pinned_messages(client, entity, MAX_PINNED_TO_FETCH)
                     for pm in pinned:
-                        if pm.id in seen_ids:
+                        if not write_message_row(writer, pm, seen_ids):
                             continue
-                        body = _message_text_or_caption(pm)
-                        if not body:
-                            continue
-                        writer.writerow(
-                            {
-                                "text_or_caption": body,
-                                "reply_to": _reply_to_id(pm),
-                                "chat_id": _chat_id(pm),
-                                "date_created": _date_created_iso(pm),
-                            }
-                        )
-                        seen_ids.add(pm.id)
                         rows_pins += 1
-                        pmd = (
-                            pm.date.replace(tzinfo=timezone.utc)
-                            if pm.date.tzinfo is None
-                            else pm.date.astimezone(timezone.utc)
-                        )
-                        if newest is None or pmd > newest:
-                            newest = pmd
-                        if oldest is None or pmd < oldest:
-                            oldest = pmd
+                        if lim is not None and rows_pins >= lim:
+                            break
 
+                    linked_from_pins = await fetch_linked_channel_posts(
+                        client, entity, pinned, seen_ids
+                    )
+                    for lm in linked_from_pins:
+                        if not write_message_row(writer, lm, seen_ids):
+                            continue
+                        rows_pins += 1
+                        LOG.info(
+                            "Included linked post msg_id=%s (referenced from pinned)",
+                            lm.id,
+                        )
                         if lim is not None and rows_pins >= lim:
                             break
 
                     if lim is None or rows_pins < lim:
-                        rows_hist, nh, oh = await write_messages_from_peer(
+                        rows_hist, newest_hist, oldest_hist = await write_messages_from_peer(
                             client,
                             peer,
                             writer,
@@ -359,11 +365,9 @@ async def run_batch(args: argparse.Namespace) -> None:
                             limit=lim,
                             min_date_utc=min_date_utc,
                             count_before=rows_pins,
+                            sleep_between_messages_number=args.sleep_between_messages_number,
+                            sleep_between_messages_duration=args.sleep_between_messages_duration,
                         )
-                    if nh is not None:
-                        newest = nh if newest is None else max(newest, nh)
-                    if oh is not None:
-                        oldest = oh if oldest is None else min(oldest, oh)
 
                     rows_total = rows_pins + rows_hist
                     t1 = datetime.now(timezone.utc)
@@ -376,8 +380,11 @@ async def run_batch(args: argparse.Namespace) -> None:
                     reason = "+".join(parts) if parts else "exhausted_or_empty"
 
                     range_note = ""
-                    if oldest is not None and newest is not None:
-                        range_note = f" message_dates=[{oldest.isoformat()} .. {newest.isoformat()}]"
+                    if oldest_hist is not None and newest_hist is not None:
+                        range_note = (
+                            f" history_dates=[{oldest_hist.isoformat()} .. {newest_hist.isoformat()}]"
+                            " (pinned/linked excluded from oldest)"
+                        )
 
                     LOG.info(
                         "Finished %s (%s): stop=%s rows=%s duration_sec=%.1f%s",
@@ -390,8 +397,12 @@ async def run_batch(args: argparse.Namespace) -> None:
                     )
 
                     entry["last_parse_date"] = now.isoformat()
-                    entry["oldest_parsed_message_date"] = oldest.isoformat() if oldest is not None else None
-                    entry["newest_parsed_message_date"] = newest.isoformat() if newest is not None else None
+                    entry["oldest_parsed_message_date"] = (
+                        oldest_hist.isoformat() if oldest_hist is not None else None
+                    )
+                    entry["newest_parsed_message_date"] = (
+                        newest_hist.isoformat() if newest_hist is not None else None
+                    )
                     entry["parsed_messages"] = rows_total
                     save_chats(cfg_path, data)
 
@@ -416,10 +427,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", type=str, default=str(_DEFAULT_CHATS_JSON), help="Path to chats.json")
     p.add_argument("-o", "--output", type=str, default=str(_DEFAULT_MERGED_CSV), help="Merged CSV path")
     p.add_argument(
+        "--force-rerun",
+        action="store_true",
+        help="Re-parse every chat even if last_parse_date is within the skip window (default: skip if <10 days).",
+    )
+    p.add_argument(
         "--sleep-between-chats",
         type=float,
         default=60.0,
         help="Seconds to sleep between chats (default: 60).",
+    )
+    p.add_argument(
+        "--sleep-between-messages-number",
+        type=int,
+        default=DEFAULT_SLEEP_BETWEEN_MESSAGES_NUMBER,
+        help="Pause after every N messages within one chat (default: 500). Set 0 to disable.",
+    )
+    p.add_argument(
+        "--sleep-between-messages-duration",
+        type=float,
+        default=DEFAULT_SLEEP_BETWEEN_MESSAGES_DURATION_SEC,
+        help="Seconds to sleep after each in-chat batch (default: 10). Ignored if --sleep-between-messages-number is 0.",
     )
     p.add_argument(
         "--limit",
@@ -485,10 +513,11 @@ def main() -> None:
     args = build_arg_parser().parse_args()
     _configure_logging(args)
     LOG.info(
-        "Throttling: every %s messages pause %s s; between chats %s s",
-        INTER_BATCH_MESSAGE_COUNT,
-        INTER_BATCH_SLEEP_SEC,
+        "Throttling: every %s messages pause %s s; between chats %s s; force_rerun=%s",
+        args.sleep_between_messages_number,
+        args.sleep_between_messages_duration,
         args.sleep_between_chats,
+        args.force_rerun,
     )
     asyncio.run(run_batch(args))
 

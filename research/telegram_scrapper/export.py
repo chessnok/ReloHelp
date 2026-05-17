@@ -9,6 +9,7 @@ import asyncio
 import csv
 import logging
 import os
+import re
 import sys
 from datetime import timezone
 from pathlib import Path
@@ -17,6 +18,8 @@ from typing import TYPE_CHECKING, Any
 from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.tl.custom.message import Message
+from telethon.tl.types import MessageEntityTextUrl, MessageEntityUrl
+from telethon.utils import get_peer_id
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -25,9 +28,17 @@ load_dotenv()
 
 _DEFAULT_CSV = Path(__file__).resolve().parent / "chat_export.csv"
 
-# Used when streaming many messages (batch export); pauses to reduce flood-wait risk.
-INTER_BATCH_MESSAGE_COUNT = 500
-INTER_BATCH_SLEEP_SEC = 10.0
+# Defaults for throttling inside one chat (batch export); override via CLI.
+DEFAULT_SLEEP_BETWEEN_MESSAGES_NUMBER = 500
+DEFAULT_SLEEP_BETWEEN_MESSAGES_DURATION_SEC = 10.0
+
+CSV_FIELDNAMES = ("text_or_caption", "msg_id", "reply_to", "chat_id", "date_created")
+
+# t.me/channel/123 or t.me/c/1136040934/123
+_TME_POST_LINK_RE = re.compile(
+    r"(?:https?://)?(?:www\.)?t\.me/(?:(c)/)?([A-Za-z0-9_]+)/(\d+)",
+    re.IGNORECASE,
+)
 
 
 def coerce_chat_entity(chat_id: int | str) -> int | str:
@@ -82,6 +93,103 @@ def _date_created_iso(message: Message) -> str:
     return dt.isoformat()
 
 
+def message_to_csv_row(message: Message) -> dict[str, str | int]:
+    return {
+        "text_or_caption": _message_text_or_caption(message),
+        "msg_id": message.id,
+        "reply_to": _reply_to_id(message),
+        "chat_id": _chat_id(message),
+        "date_created": _date_created_iso(message),
+    }
+
+
+def _link_matches_entity(slug: str, is_c_format: bool, entity: Any) -> bool:
+    peer_id = get_peer_id(entity)
+    if is_c_format:
+        try:
+            internal = int(slug)
+        except ValueError:
+            return False
+        linked_peer = int(f"-100{internal}") if internal > 0 else internal
+        return peer_id == linked_peer
+    username = getattr(entity, "username", None)
+    if not username:
+        return False
+    return slug.lower() == username.lower().lstrip("@")
+
+
+def post_ids_from_channel_links(message: Message, entity: Any) -> list[int]:
+    """Message ids for t.me post URLs that point at the same channel as ``entity``."""
+    text = message.text or message.message or ""
+    blobs: list[str] = [text] if text else []
+    for ent in message.entities or []:
+        if isinstance(ent, MessageEntityTextUrl):
+            blobs.append(ent.url)
+        elif isinstance(ent, MessageEntityUrl) and text:
+            blobs.append(text[ent.offset : ent.offset + ent.length])
+
+    ids: list[int] = []
+    seen: set[int] = set()
+    for blob in blobs:
+        for match in _TME_POST_LINK_RE.finditer(blob):
+            is_c, slug, msg_id = match.group(1), match.group(2), int(match.group(3))
+            if _link_matches_entity(slug, bool(is_c), entity) and msg_id not in seen:
+                seen.add(msg_id)
+                ids.append(msg_id)
+    return ids
+
+
+async def fetch_channel_posts_by_ids(
+    client: TelegramClient,
+    entity: Any,
+    message_ids: list[int],
+) -> list[Message]:
+    if not message_ids:
+        return []
+    out: list[Message] = []
+    for i in range(0, len(message_ids), 100):
+        batch = message_ids[i : i + 100]
+        res = await client.get_messages(entity, ids=batch)
+        items = res if isinstance(res, list) else [res]
+        for m in items:
+            if isinstance(m, Message):
+                out.append(m)
+    return out
+
+
+async def fetch_linked_channel_posts(
+    client: TelegramClient,
+    entity: Any,
+    source_messages: list[Message],
+    seen_message_ids: set[int],
+) -> list[Message]:
+    """Fetch posts linked from pinned/hub messages (same-channel t.me post URLs)."""
+    wanted: list[int] = []
+    local_seen: set[int] = set()
+    for msg in source_messages:
+        for mid in post_ids_from_channel_links(msg, entity):
+            if mid in seen_message_ids or mid in local_seen:
+                continue
+            local_seen.add(mid)
+            wanted.append(mid)
+    return await fetch_channel_posts_by_ids(client, entity, wanted)
+
+
+def write_message_row(
+    writer: csv.DictWriter,
+    message: Message,
+    seen_message_ids: set[int],
+) -> bool:
+    if message.id in seen_message_ids:
+        return False
+    body = _message_text_or_caption(message)
+    if not body:
+        return False
+    writer.writerow(message_to_csv_row(message))
+    seen_message_ids.add(message.id)
+    return True
+
+
 def _message_dt_utc(message: Message) -> "datetime":
     from datetime import datetime as dtmod
 
@@ -100,6 +208,8 @@ async def write_messages_from_peer(
     limit: int | None,
     min_date_utc: "datetime | None",
     count_before: int = 0,
+    sleep_between_messages_number: int = DEFAULT_SLEEP_BETWEEN_MESSAGES_NUMBER,
+    sleep_between_messages_duration: float = DEFAULT_SLEEP_BETWEEN_MESSAGES_DURATION_SEC,
 ) -> tuple[int, "datetime | None", "datetime | None"]:
     """
     Stream messages newest-first. Writes rows with non-empty text/caption.
@@ -127,19 +237,8 @@ async def write_messages_from_peer(
         if min_date_utc is not None and md < min_date_utc:
             break
 
-        body = _message_text_or_caption(message)
-        if not body:
+        if not write_message_row(writer, message, seen_message_ids):
             continue
-
-        writer.writerow(
-            {
-                "text_or_caption": body,
-                "reply_to": _reply_to_id(message),
-                "chat_id": _chat_id(message),
-                "date_created": _date_created_iso(message),
-            }
-        )
-        seen_message_ids.add(message.id)
         written += 1
         total += 1
         since_last_pause += 1
@@ -152,9 +251,13 @@ async def write_messages_from_peer(
         if limit is not None and total >= limit:
             break
 
-        if since_last_pause >= INTER_BATCH_MESSAGE_COUNT:
+        if (
+            sleep_between_messages_duration > 0
+            and sleep_between_messages_number > 0
+            and since_last_pause >= sleep_between_messages_number
+        ):
             since_last_pause = 0
-            await asyncio.sleep(INTER_BATCH_SLEEP_SEC)
+            await asyncio.sleep(sleep_between_messages_duration)
 
     return written, newest, oldest
 
@@ -177,7 +280,7 @@ async def export_chat_to_csv(
     ``-1001234567890``), or other strings Telethon can resolve. Prefer int or
     ``-100…`` form for groups; bare positive ids may be ambiguous (user vs channel).
 
-    CSV columns: text_or_caption, reply_to, chat_id, date_created
+    CSV columns: text_or_caption, msg_id, reply_to, chat_id, date_created
     """
     resolved_api_id = api_id or _env_int("TELEGRAM_API_ID")
     resolved_api_hash = api_hash or os.getenv("TELEGRAM_API_HASH")
@@ -194,7 +297,7 @@ async def export_chat_to_csv(
     session_path = Path(__file__).resolve().parent / resolved_session
     client = TelegramClient(str(session_path), resolved_api_id, resolved_api_hash)
 
-    fieldnames = ("text_or_caption", "reply_to", "chat_id", "date_created")
+    fieldnames = CSV_FIELDNAMES
     file_exists = out.exists() and out.stat().st_size > 0
 
     await client.start()
@@ -212,20 +315,11 @@ async def export_chat_to_csv(
             if limit is not None:
                 kwargs["limit"] = limit
 
+            seen: set[int] = set()
             async for message in client.iter_messages(peer, **kwargs):
                 if not isinstance(message, Message):
                     continue
-                body = _message_text_or_caption(message)
-                if not body:
-                    continue
-                writer.writerow(
-                    {
-                        "text_or_caption": body,
-                        "reply_to": _reply_to_id(message),
-                        "chat_id": _chat_id(message),
-                        "date_created": _date_created_iso(message),
-                    }
-                )
+                write_message_row(writer, message, seen)
     finally:
         await client.disconnect()
 

@@ -29,10 +29,12 @@ python export.py -1001350470024 --limit 1500 -o ./my_export.csv
 ### Run multiple chats (from repo root)
 ```bash
 python -m telegram_scrapper.batch_export \
-  --limit 1500 \
-  --sleep-between-chats 10 \
-  --since-days 180 \
-  -o research/telegram_scrapper/merged.csv
+  --force-rerun \
+  --since-days 360 \
+  --sleep-between-chats 15 \
+  --sleep-between-messages-number 500 \
+  --sleep-between-messages-duration 10 \
+  -o merged.csv
 ```
 
 Per chat, effective row cap is `min(--limit, number_of_messages in chats.json)` when both are set. Logs: `research/telegram_scrapper/logging.ini` → console + `research/telegram_scrapper/logs/log.log`.
