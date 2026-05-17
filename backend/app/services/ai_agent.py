@@ -16,28 +16,17 @@ _conversation_history: dict[str, list[dict]] = defaultdict(list)
 # that don't accept it — OpenAI would reject the extra parameter.
 _USER_SCOPED_TOOLS = frozenset({"get_user_email"})
 
-# Mirrors mcp/app/server.py SYSTEM_INSTRUCTIONS. The MCP server's `instructions`
-# field is only delivered to MCP-aware clients; OpenAI Chat Completions never
-# sees it, so the backend must include it as a system message itself.
-SYSTEM_INSTRUCTIONS = """\
-You are the Relohelp relocation assistant.
-
-Source-of-truth policy (MANDATORY):
-- Rely ONLY on NEW and OFFICIAL data when answering questions about visas,
-  taxes, prices, regulations, residency, healthcare, or any other
-  jurisdiction-specific topic.
-- "Official" means: government portals (.gov, .gob, .gouv, ministry sites),
-  embassies/consulates, official municipal/regional authorities, primary
-  providers (carriers, banks, insurers) on their own domains, and
-  authoritative international bodies (EU, UN, OECD, WHO).
-- "New" means: prefer content updated within the last 12 months. Discard
-  anything stale, undated, or contradicting a more recent official source.
-- NEVER answer from training-cutoff memory for time-sensitive facts. Call
-  `find_official_info` first.
-- If no official, recent source is found, say so explicitly and refuse to
-  guess.
-- Always cite the source URL and its published/updated date when available.
-"""
+# Single source of truth lives in mcp/app/server.py as FastMCP(instructions=...).
+# Backend fetches it via MCP `initialize` and caches in the service singleton.
+# This fallback is used ONLY if the MCP server is unreachable on the very first
+# chat call; it must not duplicate the policy in detail (drift risk).
+_FALLBACK_INSTRUCTIONS = (
+    "You are the Relohelp relocation assistant. The MCP server is currently "
+    "unreachable, so authoritative tool guidance is unavailable. Always call "
+    "`find_official_info` for any jurisdiction-specific question (visas, taxes, "
+    "prices, regulations, residency, healthcare). Refuse to guess; if no "
+    "official source is returned, say so explicitly."
+)
 
 # OpenAI tool definition for get_user_email (backend injects user_id when calling)
 GET_USER_EMAIL_TOOL = {
@@ -102,6 +91,40 @@ class AIAgentService:
     def __init__(self) -> None:
         self._openai_client = None
         self._mcp_client = None
+        self._instructions_cache: str | None = None
+
+    def _mcp_url(self) -> str:
+        url = settings.MCP_SERVER_URL.rstrip("/")
+        if not url.endswith("/mcp"):
+            url = f"{url}/mcp"
+        return url
+
+    async def get_system_instructions(self) -> str:
+        """Fetch SYSTEM_INSTRUCTIONS from the MCP server once and cache.
+
+        The MCP server is the single source of truth (FastMCP(instructions=...)).
+        Backend reads it on first chat and reuses; falls back to a minimal
+        embedded string if MCP is unreachable.
+        """
+        if self._instructions_cache is not None:
+            return self._instructions_cache
+
+        from fastmcp import Client
+
+        try:
+            client = Client(self._mcp_url(), timeout=10.0)
+            async with client:
+                init_result = client.initialize_result
+                instructions = (
+                    getattr(init_result, "instructions", None) if init_result else None
+                )
+        except Exception as e:
+            logger.warning("Failed to fetch MCP instructions, using fallback: %s", e)
+            instructions = None
+
+        resolved: str = instructions or _FALLBACK_INSTRUCTIONS
+        self._instructions_cache = resolved
+        return resolved
 
     def _get_openai(self):
         if self._openai_client is None:
@@ -124,10 +147,7 @@ class AIAgentService:
         else:
             # Strip user_id if model hallucinated one for a non-user-scoped tool
             params = {k: v for k, v in arguments.items() if k != "user_id"}
-        url = settings.MCP_SERVER_URL.rstrip("/")
-        if not url.endswith("/mcp"):
-            url = f"{url}/mcp"
-        client = Client(url, timeout=30.0)
+        client = Client(self._mcp_url(), timeout=30.0)
         async with client:
             result = await client.call_tool(tool_name, params)
         # CallToolResult may have .content or .result
@@ -162,8 +182,10 @@ class AIAgentService:
 
         messages = _conversation_history[conv_id].copy()
         # Ensure the source-of-truth policy is always the first message.
+        # Fetched lazily from MCP so the policy stays single-sourced there.
+        system_prompt = await self.get_system_instructions()
         if not messages or messages[0].get("role") != "system":
-            messages.insert(0, {"role": "system", "content": SYSTEM_INSTRUCTIONS})
+            messages.insert(0, {"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": message})
 
         tools = DEFAULT_TOOLS
@@ -258,7 +280,7 @@ class AIAgentService:
                         except Exception as e:
                             logger.warning("MCP tool %s failed: %s", name, e)
                             result = {
-                                "error": "I couldn't retrieve your email right now."
+                                "error": f"Tool '{name}' is unavailable right now.",
                             }
                     messages.append(
                         {

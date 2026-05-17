@@ -9,6 +9,9 @@ import pytest
 
 from app.services import ai_agent as agent_mod
 
+# Capture the real method before the autouse fixture stubs it.
+_REAL_GET_INSTRUCTIONS = agent_mod.AIAgentService.get_system_instructions
+
 
 def _stub_openai_response(content: str | None = None, tool_calls=None):
     msg = SimpleNamespace(content=content, tool_calls=tool_calls or None)
@@ -35,6 +38,19 @@ def _clear_history():
 @pytest.fixture(autouse=True)
 def _disable_langfuse(monkeypatch):
     monkeypatch.setattr(agent_mod, "get_langfuse", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _stub_instructions(monkeypatch):
+    """Default: short stub system prompt so tests don't hit MCP for instructions."""
+
+    async def _stub(self):
+        return (
+            "STUB INSTRUCTIONS: call find_official_info for official data; "
+            "rely on new, official sources only."
+        )
+
+    monkeypatch.setattr(agent_mod.AIAgentService, "get_system_instructions", _stub)
 
 
 def test_get_ai_agent_service_singleton():
@@ -119,32 +135,67 @@ class TestToolRegistry:
         assert "get_user_email" in agent_mod._USER_SCOPED_TOOLS
 
 
-class TestSystemInstructions:
-    def test_mentions_find_official_info_and_official(self):
-        assert "find_official_info" in agent_mod.SYSTEM_INSTRUCTIONS
-        assert "official" in agent_mod.SYSTEM_INSTRUCTIONS.lower()
+class TestSystemInstructionsFetch:
+    """SYSTEM_INSTRUCTIONS is sourced from MCP at runtime (single source of truth)."""
 
-    def test_matches_mcp_server_instructions(self):
-        """Both copies of SYSTEM_INSTRUCTIONS must stay in sync.
+    async def test_fallback_used_when_mcp_unreachable(self, monkeypatch):
+        class _BrokenClient:
+            def __init__(self, *a, **k):
+                pass
 
-        The MCP server's FastMCP(instructions=...) is only seen by MCP-aware
-        clients; the backend uses its own copy as the OpenAI system prompt.
-        Drift would silently change agent behaviour on only one path.
-        """
-        from pathlib import Path
+            async def __aenter__(self):
+                raise RuntimeError("MCP down")
 
-        repo_root = Path(__file__).resolve().parents[4]
-        mcp_server_text = (repo_root / "mcp" / "app" / "server.py").read_text()
+            async def __aexit__(self, *a):
+                return False
 
-        marker = 'SYSTEM_INSTRUCTIONS = """\\\n'
-        start = mcp_server_text.index(marker) + len(marker)
-        end = mcp_server_text.index('"""', start)
-        mcp_instructions = mcp_server_text[start:end]
+        import fastmcp
 
-        assert agent_mod.SYSTEM_INSTRUCTIONS == mcp_instructions, (
-            "Backend SYSTEM_INSTRUCTIONS drifted from mcp/app/server.py. "
-            "Update both copies together."
+        monkeypatch.setattr(fastmcp, "Client", _BrokenClient)
+        monkeypatch.setattr(
+            agent_mod.settings, "MCP_SERVER_URL", "http://mcp.test", raising=False
         )
+
+        service = agent_mod.AIAgentService()
+        result = await _REAL_GET_INSTRUCTIONS(service)
+        assert result == agent_mod._FALLBACK_INSTRUCTIONS
+        assert "find_official_info" in result
+
+    async def test_fetches_from_mcp_and_caches(self, monkeypatch):
+        calls = {"n": 0}
+
+        class _FakeInit:
+            instructions = "FETCHED FROM MCP"
+
+        class _FakeClient:
+            def __init__(self, *a, **k):
+                self.initialize_result = _FakeInit()
+
+            async def __aenter__(self):
+                calls["n"] += 1
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+        import fastmcp
+
+        monkeypatch.setattr(fastmcp, "Client", _FakeClient)
+        monkeypatch.setattr(
+            agent_mod.settings, "MCP_SERVER_URL", "http://mcp.test", raising=False
+        )
+
+        service = agent_mod.AIAgentService()
+        r1 = await _REAL_GET_INSTRUCTIONS(service)
+        r2 = await _REAL_GET_INSTRUCTIONS(service)
+        assert r1 == "FETCHED FROM MCP"
+        assert r2 == "FETCHED FROM MCP"
+        assert calls["n"] == 1  # cached on second call
+
+    def test_fallback_is_minimal_not_duplicate(self):
+        """Fallback must be short, not a full duplicate of the MCP policy."""
+        assert "find_official_info" in agent_mod._FALLBACK_INSTRUCTIONS
+        assert len(agent_mod._FALLBACK_INSTRUCTIONS) < 600
 
 
 async def test_chat_prepends_system_message(monkeypatch):
@@ -165,6 +216,7 @@ async def test_chat_prepends_system_message(monkeypatch):
     await service.chat("hi", uuid4(), None)
 
     assert captured["messages"][0]["role"] == "system"
+    # Content comes from the stub fixture (which itself mentions find_official_info)
     assert "find_official_info" in captured["messages"][0]["content"]
     tool_names = {t["function"]["name"] for t in captured["tools"]}
     assert tool_names == {"get_user_email", "find_official_info"}
