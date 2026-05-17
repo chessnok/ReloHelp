@@ -30,6 +30,50 @@ GET_USER_EMAIL_TOOL = {
     },
 }
 
+# Semantic search over indexed Telegram relocation/visa community chats.
+SEARCH_TELEGRAM_CHATS_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "search_telegram_chats",
+        "description": (
+            "Retrieves relevant snippets from indexed Telegram relocation/visa "
+            "community chats. Call this whenever the user asks about real-world "
+            "relocation, visa, residence permit, legalization, banking, or other "
+            "migration logistics. Each returned hit includes chat_id and "
+            "date_min/date_max - cite these in your answer."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural-language question; pass the user's question verbatim.",
+                },
+                "k": {
+                    "type": "integer",
+                    "description": "Number of hits to return (1..20). Default 5.",
+                    "minimum": 1,
+                    "maximum": 20,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+# Tools that do NOT need user_id injected at the backend layer.
+PUBLIC_TOOL_NAMES = frozenset({"search_telegram_chats"})
+
+SYSTEM_PROMPT = (
+    "You are Relohelp's assistant for relocation, visa, and residence-permit "
+    "questions. When the user asks anything that depends on real-world community "
+    "experience (e.g. obtaining a visa, residence permit, opening a bank account, "
+    "paperwork in a specific country), you MUST call the search_telegram_chats "
+    "tool before answering. Ground your reply in the returned snippets and cite "
+    "sources inline as [chat_id=<id>, date=<date_min>]. If retrieval returns no "
+    "useful hits, say so explicitly rather than inventing details."
+)
+
 
 class AIAgentService:
     """Orchestrates chat with OpenAI and MCP tool execution."""
@@ -53,8 +97,12 @@ class AIAgentService:
         """Call MCP server tool with injected user_id. Returns tool result dict."""
         from fastmcp import Client
 
-        # Always inject authenticated user_id; ignore any client-provided value
-        params = {**arguments, "user_id": str(user_id)}
+        # Inject authenticated user_id for tools that require it. Public tools
+        # (e.g. RAG retrieval) take untrusted args and must NOT receive user_id.
+        if tool_name in PUBLIC_TOOL_NAMES:
+            params = dict(arguments)
+        else:
+            params = {**arguments, "user_id": str(user_id)}
         url = settings.MCP_SERVER_URL.rstrip("/")
         if not url.endswith("/mcp"):
             url = f"{url}/mcp"
@@ -92,9 +140,11 @@ class AIAgentService:
         langfuse = get_langfuse()
 
         messages = _conversation_history[conv_id].copy()
+        if not any(m.get("role") == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
         messages.append({"role": "user", "content": message})
 
-        tools = [GET_USER_EMAIL_TOOL]
+        tools = [GET_USER_EMAIL_TOOL, SEARCH_TELEGRAM_CHATS_TOOL]
         model = settings.OPENAI_MODEL
 
         async def _chat_loop(messages, tools, model, user_id):
@@ -177,7 +227,7 @@ class AIAgentService:
                             except Exception as e:
                                 logger.warning("MCP tool %s failed: %s", name, e)
                                 result = {
-                                    "error": "I couldn't retrieve your email right now."
+                                    "error": f"Tool '{name}' failed; continue without it."
                                 }
                             tool_span.update(output=result)
                     else:

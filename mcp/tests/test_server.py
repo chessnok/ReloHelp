@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from app import server as server_module
-from app.server import _internal_headers, get_user_email, mcp
+from app.server import _internal_headers, get_user_email, mcp, search_telegram_chats
 
 VALID_UUID = "550e8400-e29b-41d4-a716-446655440000"
 
@@ -166,3 +166,60 @@ class TestGetUserEmail:
         result = await get_user_email(VALID_UUID)
 
         assert result == {"email": ""}
+
+
+class TestSearchTelegramChats:
+    async def test_registered_on_mcp(self):
+        names = {t.name for t in await mcp.list_tools()}
+        assert "search_telegram_chats" in names
+
+    async def test_returns_hits_from_rag(self, monkeypatch):
+        fake_hits = [
+            {
+                "doc_id": "thread:1:1",
+                "distance": 0.21,
+                "chat_id": 1,
+                "kind": "thread",
+                "n_msgs": 3,
+                "date_min": "2026-01-01T00:00:00Z",
+                "date_max": "2026-01-01T00:05:00Z",
+                "snippet": "visa info",
+            }
+        ]
+        monkeypatch.setattr(server_module.rag, "search", lambda q, k=5: fake_hits)
+        result = await search_telegram_chats("how to get visa", k=3)
+        assert result == {"hits": fake_hits}
+
+    async def test_empty_query_returns_error_without_calling_rag(self, monkeypatch):
+        called = {"n": 0}
+
+        def fake(q, k=5):
+            called["n"] += 1
+            return []
+
+        monkeypatch.setattr(server_module.rag, "search", fake)
+        result = await search_telegram_chats("   ")
+        assert result["hits"] == []
+        assert "Empty" in result["error"]
+        assert called["n"] == 0
+
+    async def test_rag_disabled_returns_error(self, monkeypatch):
+        from app.config import Settings
+
+        monkeypatch.setattr(
+            server_module,
+            "settings",
+            Settings(RAG_ENABLED=False, INTERNAL_API_TOKEN="t"),
+        )
+        result = await search_telegram_chats("x")
+        assert result["hits"] == []
+        assert "disabled" in result["error"].lower()
+
+    async def test_rag_exception_returns_error(self, monkeypatch):
+        def boom(q, k=5):
+            raise RuntimeError("ollama down")
+
+        monkeypatch.setattr(server_module.rag, "search", boom)
+        result = await search_telegram_chats("anything")
+        assert result["hits"] == []
+        assert "Retrieval failed" in result["error"]

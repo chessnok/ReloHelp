@@ -4,12 +4,16 @@ Tools do NOT touch the database directly. They talk to the backend over HTTP
 using a shared INTERNAL_API_TOKEN.
 """
 
+import logging
 from uuid import UUID
 
 import httpx
 from fastmcp import FastMCP
 
+from app import rag
 from app.config import settings
+
+logger = logging.getLogger("app.server")
 
 mcp = FastMCP("Relohelp MCP Server")
 
@@ -54,3 +58,32 @@ async def get_user_email(user_id: str) -> dict:
         return {"email": "", "error": "Invalid backend response"}
 
     return {"email": data.get("email", "")}
+
+
+@mcp.tool
+async def search_telegram_chats(query: str, k: int = 5) -> dict:
+    """Retrieves relevant snippets from indexed Telegram relocation/visa chats.
+
+    Use this when the user asks about real-world relocation, visa, residence permit,
+    legalization, or other migration questions where on-the-ground community advice
+    helps. Each hit includes `chat_id` and `date_min`/`date_max` for attribution —
+    cite these in your reply.
+
+    Args:
+        query: Natural-language question (any language; Russian or English work).
+        k: Number of hits to return (1..20).
+
+    Returns:
+        {"hits": [{doc_id, distance, chat_id, kind, n_msgs, date_min, date_max, snippet}, ...]}
+        or {"hits": [], "error": "..."} if RAG is disabled / unavailable.
+    """
+    if not settings.RAG_ENABLED:
+        return {"hits": [], "error": "RAG retrieval is disabled"}
+    if not isinstance(query, str) or not query.strip():
+        return {"hits": [], "error": "Empty query"}
+    try:
+        hits = rag.search(query, k=k)
+    except Exception as exc:
+        logger.exception("rag.search failed: %s", exc)
+        return {"hits": [], "error": f"Retrieval failed: {exc}"}
+    return {"hits": hits}

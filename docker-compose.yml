@@ -25,6 +25,15 @@ services:
       BACKEND_URL: http://backend:8000
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-changeme-internal-token}
       MCP_PORT: 8001
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      CHROMA_DIR: /data/chroma
+      CHROMA_COLLECTION: ${CHROMA_COLLECTION:-tg_threads}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-mxbai-embed-large}
+    volumes:
+      - chroma_data:/data/chroma
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8001:8001"
 
@@ -55,3 +64,4 @@ services:
 
 volumes:
   db_data:
+  chroma_data:
