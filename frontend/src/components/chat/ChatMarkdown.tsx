@@ -36,16 +36,9 @@ const schema = {
   ],
   attributes: {
     ...defaultSchema.attributes,
-    a: [
-      ["href", /^(https?:|mailto:|tel:|#|\/)/i],
-      ["title"],
-    ],
+    a: [["href", /^(https?:|mailto:|tel:|#|\/)/i], ["title"]],
     code: [["className", /^language-[\w-]+$/]],
-    input: [
-      ["type", "checkbox"],
-      ["checked"],
-      ["disabled"],
-    ],
+    input: [["type", "checkbox"], ["checked"], ["disabled"]],
     th: [["align", "left", "center", "right"]],
     td: [["align", "left", "center", "right"]],
   },

@@ -4,9 +4,7 @@ import { ChatMarkdown } from "./ChatMarkdown";
 
 describe("ChatMarkdown", () => {
   it("renders bold, italic, and inline code", () => {
-    render(
-      <ChatMarkdown content={"**bold** and *italic* and `code`"} />,
-    );
+    render(<ChatMarkdown content={"**bold** and *italic* and `code`"} />);
 
     expect(screen.getByText("bold").tagName).toBe("STRONG");
     expect(screen.getByText("italic").tagName).toBe("EM");
@@ -24,9 +22,7 @@ describe("ChatMarkdown", () => {
   });
 
   it("renders ordered and unordered lists", () => {
-    render(
-      <ChatMarkdown content={"- a\n- b\n\n1. one\n2. two"} />,
-    );
+    render(<ChatMarkdown content={"- a\n- b\n\n1. one\n2. two"} />);
 
     expect(screen.getByText("a").closest("ul")).not.toBeNull();
     expect(screen.getByText("one").closest("ol")).not.toBeNull();
@@ -42,11 +38,7 @@ describe("ChatMarkdown", () => {
   });
 
   it("renders safe links with target=_blank rel=noopener noreferrer", () => {
-    render(
-      <ChatMarkdown
-        content={"[Visa info](https://example.org/visa)"}
-      />,
-    );
+    render(<ChatMarkdown content={"[Visa info](https://example.org/visa)"} />);
 
     const link = screen.getByRole("link", { name: "Visa info" });
     expect(link.getAttribute("href")).toBe("https://example.org/visa");
@@ -65,11 +57,7 @@ describe("ChatMarkdown", () => {
   });
 
   it("drops javascript: link hrefs", () => {
-    render(
-      <ChatMarkdown
-        content={"[click](javascript:alert('xss'))"}
-      />,
-    );
+    render(<ChatMarkdown content={"[click](javascript:alert('xss'))"} />);
 
     const link = screen.queryByRole("link");
     if (link) {
