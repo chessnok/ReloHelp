@@ -1,4 +1,4 @@
-"""CLI: ingest a Telegram CSV export into the ChromaDB collection.
+"""CLI: ingest a Telegram CSV export into the pgvector RAG table.
 
 Usage:
     uv run python -m app.rag_ingest --csv path/to/merged.csv [--limit N] [--batch 32]
@@ -28,7 +28,9 @@ def _setup_logging(verbose: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Ingest Telegram CSV into ChromaDB.")
+    parser = argparse.ArgumentParser(
+        description="Ingest Telegram CSV into pgvector RAG table."
+    )
     parser.add_argument("--csv", required=True, type=Path, help="Path to merged.csv")
     parser.add_argument("--limit", type=int, default=None, help="Max docs to ingest")
     parser.add_argument("--batch", type=int, default=32, help="Embed batch size")

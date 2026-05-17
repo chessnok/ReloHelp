@@ -20,8 +20,10 @@ over HTTP — does **not** access the database directly.
 | `INTERNAL_API_TOKEN` | _(unset)_ | Shared secret sent as `X-Internal-Token` header |
 | `REQUEST_TIMEOUT_SECONDS` | `5.0` | Per-request timeout |
 | `RAG_ENABLED` | `true` | Disable to make `search_telegram_chats` return an error stub |
-| `CHROMA_DIR` | `/data/chroma` | Persistent ChromaDB directory |
-| `CHROMA_COLLECTION` | `tg_threads` | Collection name |
+| `RAG_DATABASE_URL` | `postgresql://postgres:postgres@db:5432/postgres` | Postgres + pgvector connection string |
+| `RAG_TABLE` | `rag_threads` | Table name (auto-created on first ingest/search) |
+| `RAG_EMBED_DIM` | `1024` | Embedding dimension (must match model output) |
+| `RAG_EMBED_WORKERS` | `8` | Concurrent ollama embed sub-batches |
 | `OLLAMA_HOST` | `http://ollama:11434` | Ollama base URL (must be reachable from the container) |
 | `OLLAMA_EMBED_MODEL` | `mxbai-embed-large` | Embedding model name |
 | `RAG_DEFAULT_K` | `5` | Default top-k |
@@ -49,8 +51,12 @@ uv run python -m app.run_server
 
 ## Docker
 
-Built and orchestrated via the root `docker-compose.yml` `mcp` service. The
-`chroma_data` named volume holds the persistent vector store.
+Built and orchestrated via the root `docker-compose.yml` `mcp` service. Vector
+storage lives in Postgres (`pgvector/pgvector:pg17` image) on the shared `db`
+service — no separate vector-store volume.
+
+For optimal embed throughput, run `ollama serve` with
+`OLLAMA_NUM_PARALLEL=8` (matches `RAG_EMBED_WORKERS`).
 
 ## RAG: ingesting Telegram chats
 
@@ -83,13 +89,13 @@ uv run python -m app.rag_ingest --csv /data/merged.csv
 uv run python -m app.rag_ingest --csv /data/merged.csv --limit 100
 ```
 
-Re-running is safe: doc_ids already in the collection are skipped, so the CLI
+Re-running is safe: doc_ids already in `rag_threads` are skipped, so the CLI
 acts as an incremental upsert.
 
 ### Notes
 
-- The image grows ~1 GB because of `chromadb` + `onnxruntime`. Acceptable for
-  MVP; revisit if it becomes painful.
+- Storage: Postgres + pgvector. The `db` service uses `pgvector/pgvector:pg17`.
+  The `rag_threads` table and HNSW cosine index are created on demand.
 - `ollama` is intentionally **not** in `docker-compose.yml`; run it on the host
   (compose maps `host.docker.internal` automatically) or point `OLLAMA_HOST` at
   a hosted instance.

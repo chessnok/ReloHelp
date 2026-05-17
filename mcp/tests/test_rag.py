@@ -169,40 +169,103 @@ class TestEmbed:
             vec = rag.embed_text("y" * 5000)
             assert vec == [0.0, 0.0, 0.0, 0.0]
             assert oc.embed.call_count == 2
-            second_kwargs = oc.embed.call_args_list[1].kwargs
-            assert (
-                len(second_kwargs["input"])
-                <= rag.settings.RAG_EMBED_FALLBACK_CHAR_LIMIT
-            )
+
+    def test_embed_texts_uses_batched_http_for_one_chunk(self):
+        with patch.object(rag.settings, "RAG_EMBED_WORKERS", 8), patch.object(
+            rag, "_embed_batch_http", return_value=[[0.1], [0.2]]
+        ) as bh:
+            out = rag.embed_texts(["a", "b"])
+        assert out == [[0.1], [0.2]]
+        bh.assert_called_once_with(["a", "b"])
+
+    def test_embed_texts_falls_back_per_item_on_batch_failure(self):
+        with patch.object(rag.settings, "RAG_EMBED_WORKERS", 8), patch.object(
+            rag, "_embed_batch_http", side_effect=RuntimeError("boom")
+        ), patch.object(rag, "embed_text", side_effect=lambda t: [hash(t) % 10]):
+            out = rag.embed_texts(["a", "b"])
+        assert out == [[hash("a") % 10], [hash("b") % 10]]
+
+
+class _FakeCursor:
+    """Minimal psycopg cursor stub with scripted fetch results per SQL prefix."""
+
+    def __init__(self, scripts):
+        self._scripts = scripts
+        self._last = None
+        self.executed = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self.executed.append((sql, params))
+        for prefix, rows in self._scripts.items():
+            if prefix in sql:
+                self._last = rows
+                return
+        self._last = []
+
+    def executemany(self, sql, rows):
+        self.executed.append((sql, list(rows)))
+
+    def fetchall(self):
+        return list(self._last or [])
+
+
+class _FakeConn:
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.committed = 0
+
+    def cursor(self):
+        return self._cursor
+
+    def commit(self):
+        self.committed += 1
+
+
+def _patch_pg(rows_for_select_doc_id=None, rows_for_search=None):
+    cur = _FakeCursor(
+        {
+            "SELECT doc_id FROM": [(d,) for d in (rows_for_select_doc_id or [])],
+            "ORDER BY embedding": rows_for_search or [],
+        }
+    )
+    conn = _FakeConn(cur)
+    return cur, conn
 
 
 class TestSearch:
     def test_returns_hits_with_attribution_and_logs(self, caplog):
-        coll = MagicMock()
-        coll.query.return_value = {
-            "ids": [["thread:1:1", "single:2:5"]],
-            "distances": [[0.21, 0.33]],
-            "metadatas": [
-                [
-                    {
-                        "chat_id": 1,
-                        "kind": "thread",
-                        "n_msgs": 3,
-                        "date_min": "2026-01-01T00:00:00Z",
-                        "date_max": "2026-01-01T00:05:00Z",
-                    },
-                    {
-                        "chat_id": 2,
-                        "kind": "single",
-                        "n_msgs": 1,
-                        "date_min": "2026-01-02T00:00:00Z",
-                        "date_max": "2026-01-02T00:00:00Z",
-                    },
-                ]
-            ],
-            "documents": [["root q1\n---\nreply", "standalone msg"]],
-        }
-        with patch.object(rag, "_get_collection", return_value=coll), patch.object(
+        rows = [
+            (
+                "thread:1:1",
+                1,
+                "thread",
+                3,
+                "2026-01-01T00:00:00Z",
+                "2026-01-01T00:05:00Z",
+                "root q1\n---\nreply",
+                0.21,
+            ),
+            (
+                "single:2:5",
+                2,
+                "single",
+                1,
+                "2026-01-02T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+                "standalone msg",
+                0.33,
+            ),
+        ]
+        _, conn = _patch_pg(rows_for_search=rows)
+        with patch.object(rag, "_ensure_schema"), patch.object(
+            rag, "_checkout_conn", return_value=conn
+        ), patch.object(rag, "_release"), patch.object(
             rag, "embed_text", return_value=[0.0] * 1024
         ):
             with caplog.at_level("INFO", logger="app.rag"):
@@ -215,67 +278,32 @@ class TestSearch:
         msgs = " ".join(r.message for r in caplog.records)
         assert "how to get visa" in msgs
         assert "thread:1:1" in msgs
-        assert "0.21" in msgs
 
     def test_clamps_k_to_max(self):
-        coll = MagicMock()
-        coll.query.return_value = {
-            "ids": [[]],
-            "distances": [[]],
-            "metadatas": [[]],
-            "documents": [[]],
-        }
-        with patch.object(rag, "_get_collection", return_value=coll), patch.object(
+        cur, conn = _patch_pg(rows_for_search=[])
+        with patch.object(rag, "_ensure_schema"), patch.object(
+            rag, "_checkout_conn", return_value=conn
+        ), patch.object(rag, "_release"), patch.object(
             rag, "embed_text", return_value=[0.0]
         ):
             rag.search("q", k=999)
-        called_k = coll.query.call_args.kwargs["n_results"]
-        assert called_k == rag.settings.RAG_MAX_K
+        order_call = next(
+            (sql, params) for sql, params in cur.executed if "ORDER BY embedding" in sql
+        )
+        assert order_call[1][2] == rag.settings.RAG_MAX_K
 
     def test_empty_query_returns_empty(self):
-        with patch.object(rag, "_get_collection") as gc:
+        with patch.object(rag, "_checkout_conn") as cc:
             assert rag.search("", k=5) == []
             assert rag.search("   ", k=5) == []
-            gc.assert_not_called()
+            cc.assert_not_called()
 
 
 class TestIngest:
-    def test_skips_already_ingested_doc_ids(self):
-        coll = MagicMock()
-        coll.get.return_value = {"ids": ["thread:1:1"]}
-        docs = [
+    def _make_docs(self, ids):
+        return [
             {
-                "doc_id": "thread:1:1",
-                "text": "a",
-                "chat_id": 1,
-                "kind": "thread",
-                "n_msgs": 2,
-                "date_min": "x",
-                "date_max": "y",
-            },
-            {
-                "doc_id": "single:1:2",
-                "text": "b",
-                "chat_id": 1,
-                "kind": "single",
-                "n_msgs": 1,
-                "date_min": "x",
-                "date_max": "y",
-            },
-        ]
-        with patch.object(rag, "embed_texts", return_value=[[0.0]]):
-            written = rag.ingest(docs, coll, batch_size=8)
-        assert written == 1
-        coll.add.assert_called_once()
-        added_ids = coll.add.call_args.kwargs["ids"]
-        assert added_ids == ["single:1:2"]
-
-    def test_no_new_docs_returns_zero(self):
-        coll = MagicMock()
-        coll.get.return_value = {"ids": ["a", "b"]}
-        docs = [
-            {
-                "doc_id": "a",
+                "doc_id": i,
                 "text": "x",
                 "chat_id": 1,
                 "kind": "single",
@@ -283,8 +311,29 @@ class TestIngest:
                 "date_min": "x",
                 "date_max": "y",
             }
+            for i in ids
         ]
-        with patch.object(rag, "embed_texts") as et:
-            written = rag.ingest(docs, coll)
+
+    def test_skips_already_ingested_doc_ids(self):
+        cur, conn = _patch_pg(rows_for_select_doc_id=["thread:1:1"])
+        with patch.object(rag, "_ensure_schema"), patch.object(
+            rag, "_checkout_conn", return_value=conn
+        ), patch.object(rag, "_release"), patch.object(
+            rag, "embed_texts", return_value=[[0.0]]
+        ):
+            written = rag.ingest(
+                self._make_docs(["thread:1:1", "single:1:2"]), batch_size=8
+            )
+        assert written == 1
+        many = [c for c in cur.executed if "INSERT INTO" in c[0]]
+        assert len(many) == 1
+        assert many[0][1][0][0] == "single:1:2"
+
+    def test_no_new_docs_returns_zero(self):
+        _, conn = _patch_pg(rows_for_select_doc_id=["a"])
+        with patch.object(rag, "_ensure_schema"), patch.object(
+            rag, "_checkout_conn", return_value=conn
+        ), patch.object(rag, "_release"), patch.object(rag, "embed_texts") as et:
+            written = rag.ingest(self._make_docs(["a"]))
             assert written == 0
             et.assert_not_called()

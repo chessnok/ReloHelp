@@ -16,10 +16,11 @@ class Settings(BaseSettings):
     INTERNAL_API_TOKEN: str | None = None
     REQUEST_TIMEOUT_SECONDS: float = 5.0
 
-    # RAG (Telegram chats → ChromaDB)
+    # RAG (Telegram chats → pgvector)
     RAG_ENABLED: bool = True
-    CHROMA_DIR: str = "/data/chroma"
-    CHROMA_COLLECTION: str = "tg_threads"
+    RAG_DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/postgres"
+    RAG_TABLE: str = "rag_threads"
+    RAG_EMBED_DIM: int = 1024  # mxbai-embed-large output dim
     OLLAMA_HOST: str = "http://ollama:11434"
     OLLAMA_EMBED_MODEL: str = "mxbai-embed-large"
     RAG_DEFAULT_K: int = 5
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     RAG_EMBED_CHAR_LIMIT: int = 600
     RAG_EMBED_FALLBACK_CHAR_LIMIT: int = 300
     RAG_DOC_CHAR_LIMIT: int = 700
+    RAG_EMBED_WORKERS: int = 8
 
     FIRECRAWL_API_KEY: str | None = None
     FIRECRAWL_API_URL: str = "https://api.firecrawl.dev"

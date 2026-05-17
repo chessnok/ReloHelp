@@ -1,28 +1,23 @@
-"""RAG service: Telegram chats → ChromaDB.
-
-Ported from the research notebook (`research/rag_pipeline.py`, PR #22).
-
-Schema assumed for source CSV (per Valik on PR #22):
-    text_or_caption, msg_id, reply_to, chat_id, date_created
+"""RAG service: Telegram chats → Postgres + pgvector.
 
 Pipeline:
-  1. Reconstruct threads using `msg_id` ↔ `reply_to` parent chain.
-     Each root = (chat_id, msg_id) with no parent or whose parent is absent.
-     Root + descendants (BFS, chronological) = one "thread" doc.
-     Root with no descendants = one "single" doc.
-  2. Embed via ollama (model from settings).
-  3. Persist in ChromaDB (cosine). Incremental: skips already-ingested doc_ids.
-  4. search(query, k) returns top-k hits with source attribution
-     (chat_id, kind, date_min, date_max, snippet).
+  1. Reconstruct threads using `msg_id` ↔ `reply_to` parent chain (build_threads).
+  2. Embed via ollama (parallel HTTP requests; ollama serves
+     OLLAMA_NUM_PARALLEL concurrent inferences).
+  3. Persist in Postgres table `rag_threads` (pgvector cosine).
+     Incremental: ON CONFLICT (doc_id) DO NOTHING.
+  4. search(query, k) returns top-k via `embedding <=> qvec` (cosine distance).
 
-Observability: query, top-k ids, and distances are logged on every search.
+CSV schema:
+    text_or_caption, msg_id, reply_to, chat_id, date_created
 """
 
 from __future__ import annotations
 
+import atexit
 import logging
 from collections import defaultdict, deque
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from app.config import settings
@@ -30,8 +25,8 @@ from app.config import settings
 logger = logging.getLogger("app.rag")
 
 _ollama_client: Any = None
-_chroma_client: Any = None
-_collection: Any = None
+_pool: Any = None
+_schema_initialized: bool = False
 
 
 def _get_ollama():
@@ -43,22 +38,77 @@ def _get_ollama():
     return _ollama_client
 
 
-def _get_collection():
-    global _chroma_client, _collection
-    if _collection is None:
-        import chromadb
-        from chromadb.config import Settings as ChromaSettings
+def _get_pool():
+    global _pool
+    if _pool is None:
+        from psycopg_pool import ConnectionPool
 
-        Path(settings.CHROMA_DIR).mkdir(parents=True, exist_ok=True)
-        _chroma_client = chromadb.PersistentClient(
-            path=settings.CHROMA_DIR,
-            settings=ChromaSettings(anonymized_telemetry=False),
+        _pool = ConnectionPool(
+            conninfo=settings.RAG_DATABASE_URL,
+            min_size=1,
+            max_size=max(4, settings.RAG_EMBED_WORKERS),
+            kwargs={"autocommit": False},
         )
-        _collection = _chroma_client.get_or_create_collection(
-            name=settings.CHROMA_COLLECTION,
-            metadata={"hnsw:space": "cosine"},
-        )
-    return _collection
+        atexit.register(_close_pool)
+    return _pool
+
+
+def _close_pool() -> None:
+    global _pool
+    if _pool is not None:
+        try:
+            _pool.close()
+        except Exception:
+            pass
+        _pool = None
+
+
+def _ensure_schema() -> None:
+    global _schema_initialized
+    if _schema_initialized:
+        return
+    from pgvector.psycopg import register_vector
+
+    pool = _get_pool()
+    table = settings.RAG_TABLE
+    dim = int(settings.RAG_EMBED_DIM)
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        conn.commit()
+        register_vector(conn)
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    doc_id     text PRIMARY KEY,
+                    chat_id    bigint,
+                    kind       text,
+                    n_msgs     integer,
+                    date_min   text,
+                    date_max   text,
+                    snippet    text,
+                    embedding  vector({dim})
+                );
+                """)
+            cur.execute(
+                f"CREATE INDEX IF NOT EXISTS {table}_embedding_idx "
+                f"ON {table} USING hnsw (embedding vector_cosine_ops);"
+            )
+        conn.commit()
+    _schema_initialized = True
+
+
+def _checkout_conn():
+    from pgvector.psycopg import register_vector
+
+    pool = _get_pool()
+    conn = pool.getconn()
+    register_vector(conn)
+    return conn
+
+
+def _release(conn) -> None:
+    _get_pool().putconn(conn)
 
 
 def _trim(text: str, limit: int) -> str:
@@ -87,16 +137,56 @@ def embed_text(text: str) -> list[float]:
         return resp["embeddings"][0]
 
 
+def _embed_batch_http(texts: list[str]) -> list[list[float]]:
+    """Single ollama HTTP call with list input. Server batches internally."""
+    client = _ollama_client if _ollama_client is not None else _get_ollama()
+    trimmed = [_trim(t, settings.RAG_EMBED_CHAR_LIMIT) for t in texts]
+    resp = client.embed(model=settings.OLLAMA_EMBED_MODEL, input=trimmed, truncate=True)
+    return resp["embeddings"]
+
+
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    return [embed_text(t) for t in texts]
+    """Embed many texts. Splits into sub-batches sent in parallel HTTP calls.
+
+    Each sub-batch is a single ollama request with list input (server-side
+    batching). Sub-batches are dispatched concurrently via ThreadPoolExecutor
+    so ollama's OLLAMA_NUM_PARALLEL slots stay busy.
+    """
+    if not texts:
+        return []
+    workers = max(1, settings.RAG_EMBED_WORKERS)
+    # Single HTTP call when the whole batch fits one worker. Otherwise split
+    # into exactly `workers` chunks dispatched in parallel.
+    if len(texts) <= workers:
+        chunks = [list(texts)]
+    else:
+        sub = (len(texts) + workers - 1) // workers
+        chunks = [texts[i : i + sub] for i in range(0, len(texts), sub)]
+
+    if len(chunks) == 1:
+        try:
+            return _embed_batch_http(chunks[0])
+        except Exception as exc:
+            logger.warning("batch embed failed (%s); falling back per-item", exc)
+            return [embed_text(t) for t in chunks[0]]
+
+    def _safe(chunk: list[str]) -> list[list[float]]:
+        try:
+            return _embed_batch_http(chunk)
+        except Exception as exc:
+            logger.warning("batch embed failed (%s); per-item fallback", exc)
+            return [embed_text(t) for t in chunk]
+
+    with ThreadPoolExecutor(max_workers=len(chunks)) as pool:
+        results = list(pool.map(_safe, chunks))
+    out: list[list[float]] = []
+    for r in results:
+        out.extend(r)
+    return out
 
 
 def build_threads(df, max_chars: int | None = None) -> list[dict[str, Any]]:
-    """Build thread docs from a DataFrame of Telegram messages.
-
-    Returns list of dicts with keys:
-        doc_id, text, chat_id, kind, n_msgs, date_min, date_max.
-    """
+    """Build thread docs from a DataFrame of Telegram messages."""
     import pandas as pd
 
     limit = max_chars if max_chars is not None else settings.RAG_DOC_CHAR_LIMIT
@@ -170,18 +260,31 @@ def build_threads(df, max_chars: int | None = None) -> list[dict[str, Any]]:
     return docs
 
 
-def ingest(
-    docs: list[dict[str, Any]],
-    collection: Any = None,
-    batch_size: int = 32,
-) -> int:
-    """Incrementally upsert docs into the collection. Returns count written."""
-    coll = collection if collection is not None else _get_collection()
+def _existing_ids(conn, doc_ids: list[str]) -> set[str]:
+    table = settings.RAG_TABLE
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT doc_id FROM {table} WHERE doc_id = ANY(%s)",
+            (doc_ids,),
+        )
+        return {row[0] for row in cur.fetchall()}
+
+
+def ingest(docs: list[dict[str, Any]], batch_size: int = 32) -> int:
+    """Incremental upsert. Returns count newly written."""
     if not docs:
         return 0
 
-    existing_ids: set[str] = set(coll.get(ids=[d["doc_id"] for d in docs])["ids"])
-    todo = [d for d in docs if d["doc_id"] not in existing_ids]
+    _ensure_schema()
+    table = settings.RAG_TABLE
+
+    conn = _checkout_conn()
+    try:
+        existing = _existing_ids(conn, [d["doc_id"] for d in docs])
+    finally:
+        _release(conn)
+
+    todo = [d for d in docs if d["doc_id"] not in existing]
     if not todo:
         return 0
 
@@ -190,61 +293,81 @@ def ingest(
         chunk = todo[start : start + batch_size]
         texts = [d["text"] for d in chunk]
         embs = embed_texts(texts)
-        metas = [
-            {
-                "chat_id": d["chat_id"],
-                "kind": d["kind"],
-                "n_msgs": d["n_msgs"],
-                "date_min": d["date_min"],
-                "date_max": d["date_max"],
-            }
-            for d in chunk
+        rows = [
+            (
+                d["doc_id"],
+                d["chat_id"],
+                d["kind"],
+                d["n_msgs"],
+                d["date_min"],
+                d["date_max"],
+                d["text"],
+                emb,
+            )
+            for d, emb in zip(chunk, embs)
         ]
-        coll.add(
-            ids=[d["doc_id"] for d in chunk],
-            embeddings=embs,
-            documents=texts,
-            metadatas=metas,
-        )
+        conn = _checkout_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    f"""
+                    INSERT INTO {table}
+                        (doc_id, chat_id, kind, n_msgs, date_min, date_max, snippet, embedding)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (doc_id) DO NOTHING
+                    """,
+                    rows,
+                )
+            conn.commit()
+        finally:
+            _release(conn)
         written += len(chunk)
     logger.info("rag.ingest wrote %d new docs", written)
     return written
 
 
 def search(query: str, k: int = 5, snippet_chars: int = 300) -> list[dict[str, Any]]:
-    """Top-k semantic search. Returns hits with source attribution.
+    """Top-k semantic search via pgvector cosine distance.
 
-    Each hit: {doc_id, distance, chat_id, kind, n_msgs, date_min, date_max, snippet}.
+    Hit: {doc_id, distance, chat_id, kind, n_msgs, date_min, date_max, snippet}.
     """
     if not query or not query.strip():
         return []
     k_clamped = max(1, min(int(k), settings.RAG_MAX_K))
-    coll = _get_collection()
+    _ensure_schema()
     qvec = embed_text(query)
-    res = coll.query(query_embeddings=[qvec], n_results=k_clamped)
+    table = settings.RAG_TABLE
 
-    ids = (res.get("ids") or [[]])[0]
-    distances = (res.get("distances") or [[]])[0]
-    metadatas = (res.get("metadatas") or [[]])[0]
-    documents = (res.get("documents") or [[]])[0]
+    conn = _checkout_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT doc_id, chat_id, kind, n_msgs, date_min, date_max, snippet,
+                       embedding <=> %s::vector AS distance
+                FROM {table}
+                ORDER BY embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (qvec, qvec, k_clamped),
+            )
+            rows = cur.fetchall()
+    finally:
+        _release(conn)
 
-    hits: list[dict[str, Any]] = []
-    for i, doc_id in enumerate(ids):
-        meta = metadatas[i] if i < len(metadatas) else {}
-        hits.append(
-            {
-                "doc_id": doc_id,
-                "distance": float(distances[i]) if i < len(distances) else None,
-                "chat_id": meta.get("chat_id"),
-                "kind": meta.get("kind"),
-                "n_msgs": meta.get("n_msgs"),
-                "date_min": meta.get("date_min"),
-                "date_max": meta.get("date_max"),
-                "snippet": (
-                    (documents[i] or "")[:snippet_chars] if i < len(documents) else ""
-                ),
-            }
-        )
+    hits: list[dict[str, Any]] = [
+        {
+            "doc_id": r[0],
+            "distance": float(r[7]) if r[7] is not None else None,
+            "chat_id": r[1],
+            "kind": r[2],
+            "n_msgs": r[3],
+            "date_min": r[4],
+            "date_max": r[5],
+            "snippet": (r[6] or "")[:snippet_chars],
+        }
+        for r in rows
+    ]
 
     logger.info(
         "rag.search query=%r k=%d ids=%s distances=%s",
