@@ -284,7 +284,9 @@ async def export_chat_to_csv(
     """
     resolved_api_id = api_id or _env_int("TELEGRAM_API_ID")
     resolved_api_hash = api_hash or os.getenv("TELEGRAM_API_HASH")
-    resolved_session = session_name or os.getenv("TELEGRAM_SESSION_NAME") or "telegram_scraper"
+    resolved_session = (
+        session_name or os.getenv("TELEGRAM_SESSION_NAME") or "telegram_scraper"
+    )
 
     if not resolved_api_id or not resolved_api_hash:
         raise ValueError(
@@ -327,7 +329,9 @@ async def export_chat_to_csv(
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Export Telegram chat messages to CSV (Telethon).")
+    p = argparse.ArgumentParser(
+        description="Export Telegram chat messages to CSV (Telethon)."
+    )
     p.add_argument(
         "chat_id",
         help="Username (@ch), full group id (-100…), or link; digit strings are parsed as int.",
@@ -338,8 +342,12 @@ def _parse_args() -> argparse.Namespace:
         default=str(_DEFAULT_CSV),
         help=f"CSV path (default: {_DEFAULT_CSV})",
     )
-    p.add_argument("--limit", type=int, default=None, help="Max messages to export (newest first).")
-    p.add_argument("--append", action="store_true", help="Append rows instead of overwriting.")
+    p.add_argument(
+        "--limit", type=int, default=None, help="Max messages to export (newest first)."
+    )
+    p.add_argument(
+        "--append", action="store_true", help="Append rows instead of overwriting."
+    )
     p.add_argument(
         "--tsv",
         action="store_true",

@@ -50,9 +50,7 @@ MAX_PINNED_TO_FETCH = 10
 LOG = logging.getLogger("telegram_scrapper.batch")
 
 # Console (coloredlogs); must match file formatter in logging.ini for parity.
-_COLORED_CONSOLE_FMT = (
-    "%(asctime)s %(levelname)-8s %(name)-10s %(message)s (%(filename)s %(funcName)s:%(lineno)s)"
-)
+_COLORED_CONSOLE_FMT = "%(asctime)s %(levelname)-8s %(name)-10s %(message)s (%(filename)s %(funcName)s:%(lineno)s)"
 
 
 def to_full_chat_id(raw: str | int | None) -> int | None:
@@ -102,14 +100,18 @@ def parse_iso_date(s: str | None) -> datetime | None:
     return dt.astimezone(timezone.utc)
 
 
-def compute_min_date_utc(since_days: float | None, until_date_str: str | None) -> datetime | None:
+def compute_min_date_utc(
+    since_days: float | None, until_date_str: str | None
+) -> datetime | None:
     """Lower bound on message time (UTC): messages with date >= this instant are kept."""
     now = datetime.now(timezone.utc)
     bounds: list[datetime] = []
     if since_days is not None:
         bounds.append(now - timedelta(days=float(since_days)))
     if until_date_str and str(until_date_str).strip():
-        ud = datetime.strptime(until_date_str.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        ud = datetime.strptime(until_date_str.strip(), "%Y-%m-%d").replace(
+            tzinfo=timezone.utc
+        )
         bounds.append(ud)
     if not bounds:
         return None
@@ -133,7 +135,9 @@ def log_date_floor_settings(
             d.strftime("%Y-%m-%d"),
         )
     if has_until:
-        p = datetime.strptime(until_date_str.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        p = datetime.strptime(until_date_str.strip(), "%Y-%m-%d").replace(
+            tzinfo=timezone.utc
+        )
         LOG.info(
             "--until-date=%s -> UTC midnight %s",
             until_date_str.strip(),
@@ -147,7 +151,9 @@ def log_date_floor_settings(
         )
 
 
-async def collect_pinned_messages(client: TelegramClient, entity: Any, max_pins: int) -> list[Message]:
+async def collect_pinned_messages(
+    client: TelegramClient, entity: Any, max_pins: int
+) -> list[Message]:
     """
     Best-effort pinned messages (up to ``max_pins``).
 
@@ -195,7 +201,9 @@ async def collect_pinned_messages(client: TelegramClient, entity: Any, max_pins:
                 m2 = await client.get_messages(entity, ids=pm)
                 take(m2 if isinstance(m2, Message) else None)
         elif isinstance(entity, Chat):
-            full = await client(functions.messages.GetFullChatRequest(chat_id=entity.id))
+            full = await client(
+                functions.messages.GetFullChatRequest(chat_id=entity.id)
+            )
             pm = getattr(full.full_chat, "pinned_msg_id", None) or None
             if pm:
                 m2 = await client.get_messages(entity, ids=pm)
@@ -212,7 +220,9 @@ def load_chats(path: Path) -> dict[str, Any]:
 
 
 def save_chats(path: Path, data: dict[str, Any]) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def has_any_json_limit(chats: list[dict[str, Any]]) -> bool:
@@ -229,7 +239,11 @@ def validate_constraints(
     until_date: str | None,
     chats: list[dict[str, Any]],
 ) -> None:
-    if cli_limit is not None or since_days is not None or (until_date and str(until_date).strip()):
+    if (
+        cli_limit is not None
+        or since_days is not None
+        or (until_date and str(until_date).strip())
+    ):
         return
     if has_any_json_limit(chats):
         return
@@ -289,7 +303,9 @@ async def run_batch(args: argparse.Namespace) -> None:
                 name = entry.get("name") or entry.get("link") or "?"
                 country = entry.get("country") or "?"
                 last_raw = entry.get("last_parse_date")
-                last_dt = parse_iso_date(str(last_raw) if last_raw is not None else None)
+                last_dt = parse_iso_date(
+                    str(last_raw) if last_raw is not None else None
+                )
                 now = datetime.now(timezone.utc)
 
                 if (
@@ -322,7 +338,14 @@ async def run_batch(args: argparse.Namespace) -> None:
                     )
                     continue
 
-                LOG.info("Start parse: %s (%s) peer=%r limit=%s min_date_utc=%s", name, country, peer, lim, min_date_utc)
+                LOG.info(
+                    "Start parse: %s (%s) peer=%r limit=%s min_date_utc=%s",
+                    name,
+                    country,
+                    peer,
+                    lim,
+                    min_date_utc,
+                )
 
                 t0 = datetime.now(timezone.utc)
                 seen_ids: set[int] = set()
@@ -334,7 +357,9 @@ async def run_batch(args: argparse.Namespace) -> None:
                 try:
                     entity = await client.get_entity(peer)
 
-                    pinned = await collect_pinned_messages(client, entity, MAX_PINNED_TO_FETCH)
+                    pinned = await collect_pinned_messages(
+                        client, entity, MAX_PINNED_TO_FETCH
+                    )
                     for pm in pinned:
                         if not write_message_row(writer, pm, seen_ids):
                             continue
@@ -357,16 +382,18 @@ async def run_batch(args: argparse.Namespace) -> None:
                             break
 
                     if lim is None or rows_pins < lim:
-                        rows_hist, newest_hist, oldest_hist = await write_messages_from_peer(
-                            client,
-                            peer,
-                            writer,
-                            seen_ids,
-                            limit=lim,
-                            min_date_utc=min_date_utc,
-                            count_before=rows_pins,
-                            sleep_between_messages_number=args.sleep_between_messages_number,
-                            sleep_between_messages_duration=args.sleep_between_messages_duration,
+                        rows_hist, newest_hist, oldest_hist = (
+                            await write_messages_from_peer(
+                                client,
+                                peer,
+                                writer,
+                                seen_ids,
+                                limit=lim,
+                                min_date_utc=min_date_utc,
+                                count_before=rows_pins,
+                                sleep_between_messages_number=args.sleep_between_messages_number,
+                                sleep_between_messages_duration=args.sleep_between_messages_duration,
+                            )
                         )
 
                     rows_total = rows_pins + rows_hist
@@ -424,8 +451,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Export all chats from chats.json into one CSV (Telethon).",
     )
-    p.add_argument("--config", type=str, default=str(_DEFAULT_CHATS_JSON), help="Path to chats.json")
-    p.add_argument("-o", "--output", type=str, default=str(_DEFAULT_MERGED_CSV), help="Merged CSV path")
+    p.add_argument(
+        "--config",
+        type=str,
+        default=str(_DEFAULT_CHATS_JSON),
+        help="Path to chats.json",
+    )
+    p.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default=str(_DEFAULT_MERGED_CSV),
+        help="Merged CSV path",
+    )
     p.add_argument(
         "--force-rerun",
         action="store_true",
@@ -476,7 +514,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="logging.config fileConfig path (default: telegram_scrapper/logging.ini).",
     )
     p.add_argument("--tsv", action="store_true", help="Tab-separated output.")
-    p.add_argument("-v", "--verbose", action="store_true", help="Set root logger to DEBUG after loading config.")
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Set root logger to DEBUG after loading config.",
+    )
     return p
 
 
