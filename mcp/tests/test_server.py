@@ -1,0 +1,168 @@
+"""Unit tests for MCP server tools and helpers."""
+
+from __future__ import annotations
+
+import httpx
+import pytest
+import respx
+
+from app import server as server_module
+from app.server import _internal_headers, get_user_email, mcp
+
+VALID_UUID = "550e8400-e29b-41d4-a716-446655440000"
+
+
+class TestInternalHeaders:
+    def test_returns_token_header_when_set(self, mcp_settings):
+        assert _internal_headers() == {"X-Internal-Token": "test-token"}
+
+    def test_returns_empty_dict_when_token_missing(self, mcp_settings_no_token):
+        assert _internal_headers() == {}
+
+
+class TestToolRegistry:
+    async def test_get_user_email_registered(self):
+        tools = await mcp.list_tools()
+        names = {t.name for t in tools}
+        assert "get_user_email" in names
+
+    async def test_tool_has_description(self):
+        tool = await mcp.get_tool("get_user_email")
+        assert tool is not None
+        assert tool.description
+        assert "user" in tool.description.lower()
+
+
+class TestGetUserEmail:
+    async def test_invalid_uuid_returns_error_without_http_call(
+        self, mcp_settings, respx_mock
+    ):
+        result = await get_user_email("not-a-uuid")
+        assert result == {"email": "", "error": "Invalid user_id format"}
+        assert len(respx_mock.calls) == 0
+
+    async def test_empty_string_returns_error(self, mcp_settings):
+        result = await get_user_email("")
+        assert result["email"] == ""
+        assert "Invalid" in result["error"]
+
+    @respx.mock
+    async def test_happy_path_returns_email(self, mcp_settings):
+        route = respx.get(
+            f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email"
+        ).mock(return_value=httpx.Response(200, json={"email": "user@example.com"}))
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result == {"email": "user@example.com"}
+        assert route.called
+        request = route.calls.last.request
+        assert request.headers.get("X-Internal-Token") == "test-token"
+
+    @respx.mock
+    async def test_no_token_omits_header(self, mcp_settings_no_token):
+        route = respx.get(
+            f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email"
+        ).mock(return_value=httpx.Response(200, json={"email": "u@example.com"}))
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result == {"email": "u@example.com"}
+        assert route.called
+        assert "X-Internal-Token" not in route.calls.last.request.headers
+
+    @respx.mock
+    async def test_backend_url_trailing_slash_stripped(self, monkeypatch):
+        from app.config import Settings
+
+        s = Settings(
+            BACKEND_URL="http://backend.test/",
+            INTERNAL_API_TOKEN="t",
+            REQUEST_TIMEOUT_SECONDS=1.0,
+        )
+        monkeypatch.setattr(server_module, "settings", s)
+
+        route = respx.get(
+            f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email"
+        ).mock(return_value=httpx.Response(200, json={"email": "x@y.z"}))
+
+        await get_user_email(VALID_UUID)
+        assert route.called
+
+    @respx.mock
+    async def test_404_returns_user_not_found(self, mcp_settings):
+        respx.get(f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email").mock(
+            return_value=httpx.Response(404)
+        )
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result == {"email": "", "error": "User not found"}
+
+    @respx.mock
+    async def test_401_returns_unauthorized(self, mcp_settings):
+        respx.get(f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email").mock(
+            return_value=httpx.Response(401)
+        )
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result == {
+            "email": "",
+            "error": "Unauthorized (internal token invalid)",
+        }
+
+    @respx.mock
+    @pytest.mark.parametrize("status", [400, 403, 422, 500, 502, 503])
+    async def test_other_error_statuses(self, mcp_settings, status):
+        respx.get(f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email").mock(
+            return_value=httpx.Response(status)
+        )
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result == {"email": "", "error": f"Backend error: {status}"}
+
+    @respx.mock
+    async def test_network_failure_returns_unreachable(self, mcp_settings):
+        respx.get(f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email").mock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result["email"] == ""
+        assert result["error"].startswith("Backend unreachable:")
+
+    @respx.mock
+    async def test_timeout_returns_unreachable(self, mcp_settings):
+        respx.get(f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email").mock(
+            side_effect=httpx.ReadTimeout("timed out")
+        )
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result["email"] == ""
+        assert "Backend unreachable" in result["error"]
+
+    @respx.mock
+    async def test_invalid_json_response(self, mcp_settings):
+        respx.get(f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email").mock(
+            return_value=httpx.Response(
+                200, content=b"not-json", headers={"content-type": "text/plain"}
+            )
+        )
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result == {"email": "", "error": "Invalid backend response"}
+
+    @respx.mock
+    async def test_response_missing_email_field(self, mcp_settings):
+        respx.get(f"http://backend.test/api/v1/internal/users/{VALID_UUID}/email").mock(
+            return_value=httpx.Response(200, json={"other": "field"})
+        )
+
+        result = await get_user_email(VALID_UUID)
+
+        assert result == {"email": ""}

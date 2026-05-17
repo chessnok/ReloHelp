@@ -22,7 +22,7 @@ describe("App routing", () => {
     render(<App />);
 
     expect(
-      await screen.findByText("Enter your credentials to access your account"),
+      await screen.findByText("Sign in to continue your relocation journey"),
     ).toBeInTheDocument();
   });
 

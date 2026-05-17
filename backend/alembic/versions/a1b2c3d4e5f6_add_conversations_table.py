@@ -5,6 +5,7 @@ Revises: ebc03eaf0376
 Create Date: 2026-02-12
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -22,13 +23,25 @@ def upgrade() -> None:
         "conversations",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=True,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=True,
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_conversations_id"), "conversations", ["id"], unique=False)
-    op.create_index(op.f("ix_conversations_user_id"), "conversations", ["user_id"], unique=False)
+    op.create_index(
+        op.f("ix_conversations_user_id"), "conversations", ["user_id"], unique=False
+    )
 
 
 def downgrade() -> None:

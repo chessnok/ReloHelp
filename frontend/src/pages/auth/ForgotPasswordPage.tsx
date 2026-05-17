@@ -62,12 +62,15 @@ export const ForgotPasswordPage: React.FC = () => {
         <CardHeader>
           <CardTitle>Check your email</CardTitle>
           <CardDescription>
-            We have sent a password reset link to your email address.
+            We sent a password reset link to your email address.
           </CardDescription>
         </CardHeader>
-        <CardFooter className="flex justify-center">
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Back to Login
+        <CardFooter className="flex justify-center pt-2">
+          <Link
+            to="/login"
+            className="text-sm text-ink underline-offset-4 hover:underline"
+          >
+            Back to sign in
           </Link>
         </CardFooter>
       </Card>
@@ -77,19 +80,19 @@ export const ForgotPasswordPage: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Forgot Password</CardTitle>
+        <CardTitle>Reset your password</CardTitle>
         <CardDescription>
-          Enter your email to reset your password
+          We'll email you a secure link to set a new password
         </CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive" className="mb-6">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <FormField
               control={form.control}
               name="email"
@@ -101,7 +104,7 @@ export const ForgotPasswordPage: React.FC = () => {
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="email@example.com" {...field} />
+                    <Input placeholder="you@example.com" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -109,17 +112,21 @@ export const ForgotPasswordPage: React.FC = () => {
             />
             <Button
               type="submit"
+              size="lg"
               className="w-full"
               disabled={form.formState.isSubmitting}
             >
-              {form.formState.isSubmitting ? "Sending..." : "Send Reset Link"}
+              {form.formState.isSubmitting ? "Sending…" : "Send reset link"}
             </Button>
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="flex justify-center">
-        <Link to="/login" className="text-blue-600 hover:underline">
-          Back to Login
+      <CardFooter className="flex justify-center pt-2">
+        <Link
+          to="/login"
+          className="text-sm text-ink underline-offset-4 hover:underline"
+        >
+          Back to sign in
         </Link>
       </CardFooter>
     </Card>

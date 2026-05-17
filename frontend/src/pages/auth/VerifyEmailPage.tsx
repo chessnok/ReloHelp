@@ -53,27 +53,35 @@ export const VerifyEmailPage: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Email Verification</CardTitle>
-        <CardDescription>Verifying your email address</CardDescription>
+        <CardTitle>Email verification</CardTitle>
+        <CardDescription>Confirming your email address</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col items-center justify-center py-6">
+      <CardContent className="flex flex-col items-center justify-center py-8">
         {status === "loading" && (
           <div className="flex flex-col items-center space-y-4">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
-            <p>Verifying...</p>
+            <Loader2 className="h-10 w-10 animate-spin text-ink" />
+            <p className="text-muted-stone">Verifying…</p>
           </div>
         )}
         {status === "success" && (
-          <div className="flex flex-col items-center space-y-4 text-green-600">
-            <CheckCircle2 className="h-12 w-12" />
-            <p className="text-lg font-medium">Email verified successfully!</p>
+          <div className="flex flex-col items-center space-y-4 text-ink">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-warm-mist">
+              <CheckCircle2 className="h-7 w-7 text-terracotta" />
+            </div>
+            <p className="font-display text-2xl tracking-tight">
+              Email verified
+            </p>
           </div>
         )}
         {status === "error" && (
-          <div className="flex flex-col items-center space-y-4 text-red-600">
-            <XCircle className="h-12 w-12" />
-            <p className="text-lg font-medium">Verification failed</p>
-            <Alert variant="destructive">
+          <div className="flex w-full flex-col items-center space-y-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-fog">
+              <XCircle className="h-7 w-7 text-destructive" />
+            </div>
+            <p className="font-display text-2xl tracking-tight text-ink">
+              Verification failed
+            </p>
+            <Alert variant="destructive" className="w-full">
               <AlertTitle>Error</AlertTitle>
               <AlertDescription>{message}</AlertDescription>
             </Alert>
@@ -81,16 +89,17 @@ export const VerifyEmailPage: React.FC = () => {
         )}
       </CardContent>
       {status === "success" && (
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            Redirecting to login page...
-          </p>
+        <CardFooter className="flex justify-center pt-2">
+          <p className="text-sm text-muted-stone">Redirecting to sign in…</p>
         </CardFooter>
       )}
       {status === "error" && (
-        <CardFooter className="flex justify-center">
-          <Link to="/login" className="text-blue-600 hover:underline">
-            Go to Login
+        <CardFooter className="flex justify-center pt-2">
+          <Link
+            to="/login"
+            className="text-sm text-ink underline-offset-4 hover:underline"
+          >
+            Go to sign in
           </Link>
         </CardFooter>
       )}
