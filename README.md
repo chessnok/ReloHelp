@@ -4,7 +4,7 @@ AI-assisted relocation helper. Combines a FastAPI backend (auth + chat), a React
 
 ## What we are building
 
-https://www.notion.so/MVP-description-and-App-Architecture-3055ee5a340e80729cacc041f45b513c
+https://hazel-watcher-e79.notion.site/App-Architecture-3055ee5a340e80729cacc041f45b513c?source=copy_link
 
 ## Stack
 
