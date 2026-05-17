@@ -29,14 +29,14 @@ test("renders app and redirects to login when not authenticated", async () => {
   await waitFor(
     () => {
       expect(
-        screen.getByText("Enter your credentials to access your account"),
+        screen.getByText("Sign in to continue your relocation journey"),
       ).toBeInTheDocument();
     },
     { timeout: 3000 },
   );
 
   // Check that login page elements are present
-  expect(screen.getByPlaceholderText("email@example.com")).toBeInTheDocument();
-  expect(screen.getByPlaceholderText("******")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /login/i })).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("••••••••")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
 });
