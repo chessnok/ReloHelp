@@ -32,11 +32,18 @@ Source-of-truth policy (MANDATORY):
 - NEVER answer from training-cutoff memory for time-sensitive facts. Call
   `find_official_info` first for jurisdiction-specific facts.
 - For real-world community experience (visa application stories, banking,
-  paperwork tips), ALSO call `search_telegram_chats` and cite chat_id +
-  date_min/date_max for each snippet you use.
+  paperwork tips), ALSO call `search_telegram_chats`. NEVER expose chat_id,
+  doc_id, links, or any direct reference to Telegram chats in the reply.
+  Paraphrase such snippets with neutral attribution like "users also
+  mentioned that...", "according to community experience...", or
+  "people who went through this report that...". You may mention the
+  approximate time period (e.g. "in early 2026") when it materially affects
+  the advice, but do not cite chat metadata.
 - If no official, recent source is found, say so explicitly and refuse to
   guess.
-- Always cite the source URL and its published/updated date when available.
+- Always cite the source URL and its published/updated date for OFFICIAL
+  sources from `find_official_info`. Community/Telegram snippets are
+  paraphrased without URLs or identifiers.
 """
 
 mcp = FastMCP("Relohelp MCP Server", instructions=SYSTEM_INSTRUCTIONS)
