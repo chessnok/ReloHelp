@@ -23,8 +23,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { LOGIN_PASSWORD_ERROR } from "@/lib/authStrings";
 import { formatApiErrorDetail, isAxiosErrorWithStatus } from "@/lib/apiErrors";
-import { LOGIN_PASSWORD_ERROR } from "@/lib/passwordPolicy";
 import axios from "axios";
 
 const loginSchema = z.object({
@@ -50,11 +50,12 @@ export const LoginPage: React.FC = () => {
   const onSubmit = async (data: LoginFormValues) => {
     try {
       setError(null);
-      form.clearErrors("password");
+      form.clearErrors();
       await login(data);
       navigate("/");
     } catch (err) {
       if (isAxiosErrorWithStatus(err, 401)) {
+        form.setError("email", { message: LOGIN_PASSWORD_ERROR });
         form.setError("password", { message: LOGIN_PASSWORD_ERROR });
         return;
       }

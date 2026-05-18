@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/test/server";
 import { testUser } from "@/test/utils";
-import { LOGIN_PASSWORD_ERROR } from "@/lib/passwordPolicy";
+import { LOGIN_PASSWORD_ERROR } from "@/lib/authStrings";
 import { ForgotPasswordPage } from "./ForgotPasswordPage";
 import { LoginPage } from "./LoginPage";
 import { RegisterPage } from "./RegisterPage";
@@ -91,7 +91,7 @@ describe("auth pages", () => {
     expect(screen.getByText("Home destination")).toBeInTheDocument();
   });
 
-  it("shows login API errors on the password field", async () => {
+  it("shows login API errors on email and password fields", async () => {
     authMock.login.mockRejectedValue({
       isAxiosError: true,
       response: {
@@ -105,7 +105,8 @@ describe("auth pages", () => {
     await userEvent.type(screen.getByLabelText("Password"), "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(await screen.findByText(LOGIN_PASSWORD_ERROR)).toBeInTheDocument();
+    const messages = await screen.findAllByText(LOGIN_PASSWORD_ERROR);
+    expect(messages).toHaveLength(2);
   });
 
   it("validates and submits the register form", async () => {
