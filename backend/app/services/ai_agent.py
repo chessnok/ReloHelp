@@ -2,13 +2,18 @@
 
 import json
 from collections import defaultdict
+from typing import Any
 from uuid import UUID, uuid4
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.langfuse_client import get_langfuse
 from app.core.logger import logger
 
-# In-memory conversation history: conversation_id -> list of OpenAI message dicts
+# Legacy in-memory conversation history. Used only when the caller does not
+# supply a DB session (unit tests). Production traffic always hits the
+# DB-backed path via the FastAPI route.
 _conversation_history: dict[str, list[dict]] = defaultdict(list)
 
 # Tools that need the authenticated user_id injected server-side.
@@ -28,7 +33,6 @@ _FALLBACK_INSTRUCTIONS = (
     "community experience. Refuse to guess; if no source is returned, say so explicitly."
 )
 
-# OpenAI tool definition for get_user_email (backend injects user_id when calling)
 GET_USER_EMAIL_TOOL = {
     "type": "function",
     "function": {
@@ -82,7 +86,6 @@ FIND_OFFICIAL_INFO_TOOL = {
     },
 }
 
-# Semantic search over indexed Telegram relocation/visa community chats.
 SEARCH_TELEGRAM_CHATS_TOOL = {
     "type": "function",
     "function": {
@@ -135,12 +138,6 @@ class AIAgentService:
         return url
 
     async def get_system_instructions(self) -> str:
-        """Fetch SYSTEM_INSTRUCTIONS from the MCP server once and cache.
-
-        The MCP server is the single source of truth (FastMCP(instructions=...)).
-        Backend reads it on first chat and reuses; falls back to a minimal
-        embedded string if MCP is unreachable.
-        """
         if self._instructions_cache is not None:
             return self._instructions_cache
 
@@ -173,19 +170,15 @@ class AIAgentService:
     async def _call_mcp_tool(
         self, tool_name: str, arguments: dict, user_id: UUID
     ) -> dict:
-        """Call MCP server tool. For user-scoped tools, inject authenticated user_id."""
         from fastmcp import Client
 
         if tool_name in _USER_SCOPED_TOOLS:
-            # Always overwrite any client-provided user_id with the authenticated one
             params = {**arguments, "user_id": str(user_id)}
         else:
-            # Strip user_id if model hallucinated one for a non-user-scoped tool
             params = {k: v for k, v in arguments.items() if k != "user_id"}
         client = Client(self._mcp_url(), timeout=30.0)
         async with client:
             result = await client.call_tool(tool_name, params)
-        # CallToolResult may have .content or .result
         if hasattr(result, "content") and result.content:
             part = (
                 result.content[0]
@@ -209,18 +202,66 @@ class AIAgentService:
         message: str,
         user_id: UUID,
         conversation_id: str | None,
+        *,
+        db: AsyncSession | None = None,
+        background_tasks: Any | None = None,
     ) -> tuple[str, str, str | None]:
-        """Process a chat message; returns (response_text, conversation_id, trace_id)."""
+        """Process a chat message; returns (response_text, conversation_id, trace_id).
+
+        When `db` is provided, conversation history is loaded from / persisted
+        to the `messages` table and per-user long-term memories are retrieved
+        and injected into the system prompt. When `db` is None, falls back to
+        the legacy in-memory dict (used by tests that don't spin up a database).
+        """
         conv_id = conversation_id or str(uuid4())
+        conv_uuid: UUID | None
+        try:
+            conv_uuid = UUID(conv_id)
+        except ValueError:
+            # Legacy in-memory path tolerates arbitrary strings (used by
+            # existing tests); DB path always coerces to a UUID below.
+            conv_uuid = None
+        if db is not None and conv_uuid is None:
+            conv_uuid = uuid4()
+            conv_id = str(conv_uuid)
+
         trace_id: str | None = None
         langfuse = get_langfuse()
 
-        messages = _conversation_history[conv_id].copy()
-        # Ensure the source-of-truth policy is always the first message.
-        # Fetched lazily from MCP so the policy stays single-sourced there.
+        if db is not None:
+            from app.services.messages import get_message_service
+
+            msg_svc = get_message_service()
+            await msg_svc.ensure_conversation(db, conv_uuid, user_id)
+            messages = await msg_svc.load_history(
+                db, conv_uuid, limit=settings.MEMORY_HISTORY_LIMIT
+            )
+            history_len_before = len(messages)
+        else:
+            messages = _conversation_history[conv_id].copy()
+            # Legacy path used to keep the leading system message in the list;
+            # drop it because we always re-inject a fresh one below.
+            if messages and messages[0].get("role") == "system":
+                messages = messages[1:]
+            history_len_before = None
+
         system_prompt = await self.get_system_instructions()
-        if not messages or messages[0].get("role") != "system":
-            messages.insert(0, {"role": "system", "content": system_prompt})
+        if db is not None and settings.MEMORY_ENABLED:
+            try:
+                from app.services.memory import get_memory_service
+
+                mem_svc = get_memory_service()
+                hits = await mem_svc.search(db, user_id, message)
+                if hits:
+                    block = (
+                        "Known facts about the user (from prior conversations):\n"
+                        + "\n".join(f"- [{h.kind}] {h.content}" for h in hits)
+                    )
+                    system_prompt = f"{system_prompt}\n\n{block}"
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Memory retrieval failed: %s", exc)
+
+        messages.insert(0, {"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": message})
 
         tools = DEFAULT_TOOLS
@@ -350,7 +391,6 @@ class AIAgentService:
         else:
             messages = await _chat_loop(messages, tools, model, user_id)
 
-        # Last assistant message in list
         for m in reversed(messages):
             if m.get("role") == "assistant" and m.get("content"):
                 response_text = m["content"]
@@ -358,16 +398,63 @@ class AIAgentService:
         else:
             response_text = "I couldn't generate a response. Please try again."
 
-        # Persist history (cap length); always keep the leading system message.
-        if messages and messages[0].get("role") == "system":
-            _conversation_history[conv_id] = [messages[0]] + messages[1:][-19:]
+        if db is not None:
+            assert conv_uuid is not None  # set above when db is not None
+            await self._persist_new_turns(db, conv_uuid, messages, history_len_before)
+            await db.commit()
+            if background_tasks is not None and settings.MEMORY_ENABLED:
+                from app.services.memory import get_memory_service
+
+                tail = _extraction_tail(messages, settings.MEMORY_EXTRACTION_TURNS)
+                background_tasks.add_task(
+                    get_memory_service().extract_and_store,
+                    user_id,
+                    conv_uuid,
+                    tail,
+                )
         else:
-            _conversation_history[conv_id] = messages[-20:]
+            if messages and messages[0].get("role") == "system":
+                _conversation_history[conv_id] = [messages[0]] + messages[1:][-19:]
+            else:
+                _conversation_history[conv_id] = messages[-20:]
         return response_text, conv_id, trace_id
+
+    async def _persist_new_turns(
+        self,
+        db: AsyncSession,
+        conv_uuid: UUID,
+        messages: list[dict],
+        history_len_before: int | None,
+    ) -> None:
+        from app.services.messages import get_message_service
+
+        msg_svc = get_message_service()
+        # Layout: [system, ...loaded history (history_len_before items), ...new turns]
+        start = 1 + (history_len_before or 0)
+        for m in messages[start:]:
+            role = m.get("role")
+            if role == "system":
+                continue
+            await msg_svc.append(
+                db,
+                conversation_id=conv_uuid,
+                role=role,
+                content=m.get("content"),
+                tool_calls=m.get("tool_calls"),
+                tool_call_id=m.get("tool_call_id"),
+            )
+
+
+def _extraction_tail(messages: list[dict], n: int) -> list[dict]:
+    keep = [
+        m
+        for m in messages
+        if m.get("role") in {"user", "assistant"} and m.get("content")
+    ]
+    return keep[-n:]
 
 
 def get_ai_agent_service() -> AIAgentService:
-    """Return singleton AI agent service."""
     if not hasattr(get_ai_agent_service, "_instance"):
         get_ai_agent_service._instance = AIAgentService()
     return get_ai_agent_service._instance
