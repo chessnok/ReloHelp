@@ -111,7 +111,31 @@ import sqlalchemy.dialects.postgresql.base as _pg_base
 
 _pg.UUID = _GUID
 _pg_base.UUID = _GUID
+_pg.JSONB = JSON
+_pg_base.JSONB = JSON
 _sa.ARRAY = _JSONList
+
+# pgvector.Vector is a Postgres-only column type. Tests run on sqlite, so swap
+# it for a plain JSON column that round-trips the float list.
+try:
+    import pgvector.sqlalchemy as _pgvec
+
+    class _VectorAsJson(TypeDecorator):
+        impl = JSON
+        cache_ok = True
+
+        def __init__(self, _dim=None, **kw):
+            super().__init__(**kw)
+
+        def process_bind_param(self, value, dialect):
+            return list(value) if value is not None else None
+
+        def process_result_value(self, value, dialect):
+            return list(value) if value is not None else None
+
+    _pgvec.Vector = _VectorAsJson
+except ImportError:
+    pass
 
 from typing import AsyncIterator
 

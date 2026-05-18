@@ -11,7 +11,15 @@ class _FakeAgent:
     def __init__(self, behavior: str = "ok"):
         self.behavior = behavior
 
-    async def chat(self, message, user_id, conversation_id):
+    async def chat(
+        self,
+        message,
+        user_id,
+        conversation_id,
+        *,
+        db=None,
+        background_tasks=None,
+    ):
         if self.behavior == "ok":
             return "hello", conversation_id or "cid", "tid"
         if self.behavior == "no_key":

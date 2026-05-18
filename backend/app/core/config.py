@@ -100,6 +100,19 @@ class Settings(BaseSettings):
     # MCP server (FastMCP); must include /mcp path for HTTP transport
     MCP_SERVER_URL: str = "http://localhost:8001/mcp"
 
+    # Long-term memory (per-user, cross-conversation). Independent of RAG
+    # dimension; memories table owns its own VECTOR(MEMORY_EMBED_DIM) column.
+    OLLAMA_HOST: str = "http://host.docker.internal:11434"
+    MEMORY_EMBED_MODEL: str = "nomic-embed-text"
+    MEMORY_EMBED_DIM: int = 768
+    MEMORY_TOP_K: int = 5
+    MEMORY_MIN_SIMILARITY: float = 0.7
+    MEMORY_DEDUPE_SIMILARITY: float = 0.95
+    MEMORY_EXTRACTION_MODEL: str | None = None  # falls back to OPENAI_MODEL when None
+    MEMORY_HISTORY_LIMIT: int = 20
+    MEMORY_EXTRACTION_TURNS: int = 6
+    MEMORY_ENABLED: bool = True
+
     # Shared secret for service-to-service internal API calls (e.g. MCP -> backend)
     INTERNAL_API_TOKEN: str | None = None
 

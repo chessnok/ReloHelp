@@ -1,9 +1,11 @@
 """AI chat endpoint."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.schemas.ai import ChatRequest, ChatResponse
 from app.core.dependencies import get_current_user
+from app.db import get_db_session
 from app.db.models.user import User
 from app.services.ai_agent import get_ai_agent_service
 
@@ -13,7 +15,9 @@ router = APIRouter(prefix="/api/ai", tags=["AI"])
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     body: ChatRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Send a message to the AI agent. Requires authentication."""
     agent = get_ai_agent_service()
@@ -22,6 +26,8 @@ async def chat(
             message=body.message,
             user_id=current_user.id,
             conversation_id=body.conversation_id,
+            db=db,
+            background_tasks=background_tasks,
         )
         return ChatResponse(
             response=response_text,
