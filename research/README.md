@@ -1,63 +1,67 @@
 # research
 
-Telegram → RAG pipeline experiments.
-
-Two parts:
-
-1. **`telegram_scrapper/`** — exports messages from Telegram chats into `merged.csv`.
-2. **`rag_pipeline.py`** — marimo notebook that turns `merged.csv` into embeddings stored in a local ChromaDB collection and runs sample RAG queries.
+Telegram → RAG pipeline experiments. Single [uv](https://docs.astral.sh/uv/) project with optional dependency groups.
 
 ## Layout
 
 ```
 research/
-├── pyproject.toml          # uv-managed deps (marimo, chromadb, ollama, pandas, tqdm)
-├── rag_pipeline.py         # marimo notebook: CSV → threads → embeddings → ChromaDB → query
-├── merged.csv              # exported chat messages (LFS, produced by telegram_scrapper)
-├── chroma_db/              # persistent ChromaDB store (created on first run)
-└── telegram_scrapper/      # Telegram exporter (see its own docs.md)
-    ├── export.py
-    ├── batch_export.py
+├── pyproject.toml              # uv project + dependency groups (rag, telegram, translate)
+├── uv.lock
+├── rag_pipeline.py             # marimo: CSV → threads → ollama → ChromaDB
+├── translate_csv.py            # CLI: merged.csv → merged.en.csv
+├── chroma_db/                  # persistent ChromaDB (created on first RAG run)
+└── telegram_scrapper/
+    ├── telegram_scrapper/      # Python package (export, batch_export)
     ├── chats.json
-    └── requirements.txt
+    ├── merged.csv              # batch export output (LFS)
+    ├── notebooks/csv_readability.py
+    └── docs.md
 ```
 
-## Requirements
+## Dependency groups
 
-- Python ≥ 3.13
-- [uv](https://docs.astral.sh/uv/) for dependency management
-- [ollama](https://ollama.com/) running locally with the `mxbai-embed-large` model pulled:
-  ```bash
-  ollama pull mxbai-embed-large
-  ```
-- Git LFS (for `merged.csv`)
-
-## Setup
+| Group | Packages | Use |
+| --- | --- | --- |
+| *(default)* | `marimo`, `pandas` | notebooks / CSV tooling |
+| `telegram` | `telethon`, `python-dotenv`, `coloredlogs` | scraper CLI |
+| `rag` | `chromadb`, `ollama`, `tqdm` | RAG pipeline notebook |
+| `translate` | `deep-translator`, `langdetect` | `translate_csv.py` |
 
 ```bash
 cd research
-uv sync
+uv sync --all-groups          # everything
+uv sync --group telegram      # scraper only
+uv sync --group rag           # RAG only
 ```
 
-## Running the pipeline
+## Telegram scraper
+
+See `telegram_scrapper/docs.md`.
 
 ```bash
+uv sync --group telegram
+cp telegram_scrapper/.env.example telegram_scrapper/.env
+uv run python -m telegram_scrapper.batch_export --help
+```
+
+## RAG pipeline
+
+```bash
+uv sync --group rag
 uv run marimo edit rag_pipeline.py
 ```
 
-The notebook executes top-to-bottom:
+Requires host [ollama](https://ollama.com/) with `mxbai-embed-large` (`ollama pull mxbai-embed-large`).
 
-1. Load `telegram_scrapper/merged.csv`, drop empty `text_or_caption`, parse `date_created` as UTC, sort by `(chat_id, date_created)`.
-2. **Thread reconstruction.** Messages sharing `(chat_id, reply_to)` are merged into one document (`kind=thread`, id = `thread:{chat_id}:{reply_to}`). Standalone messages become their own document (`kind=single`, id = `single:{chat_id}:{msg_id}`).
-3. **Embed.** `ollama.embed` with `mxbai-embed-large`. Texts trimmed to 600 chars (300-char fallback on error). Dim 1024.
-4. **Store.** Persistent ChromaDB at `chroma_db/`, cosine space, collection `tg_threads`. Idempotent: existing `doc_id`s are skipped.
-5. **Query.** `rag_query("...", k=5)` returns `id`, `distance`, `metadata`, and snippet.
+## CSV translation
 
-By default the notebook ingests only **50** docs as a smoke test. For a full ingest set `n_test_sample = None` in the ingest cell.
+```bash
+uv sync --group translate
+uv run python translate_csv.py --in telegram_scrapper/merged.csv --out telegram_scrapper/merged.en.csv
+```
 
-## CSV schema
-
-`merged.csv` columns:
+## CSV schema (`merged.csv`)
 
 | column | description |
 | --- | --- |
@@ -67,8 +71,8 @@ By default the notebook ingests only **50** docs as a smoke test. For a full ing
 | `chat_id` | source chat id |
 | `date_created` | ISO 8601, UTC |
 
-`doc_id`s are derived from `chat_id` + `msg_id` / `reply_to`, so they survive CSV re-sorts and re-runs.
+## Requirements
 
-## Re-scraping
-
-See `telegram_scrapper/docs.md`. After producing a new `merged.csv`, re-run the notebook — already-ingested `doc_id`s are skipped, new docs are added.
+- Python ≥ 3.13, `uv`
+- Git LFS (for `telegram_scrapper/merged.csv`)
+- ollama on host for RAG

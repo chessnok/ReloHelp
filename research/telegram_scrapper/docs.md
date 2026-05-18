@@ -1,16 +1,32 @@
 # Telegram batch export (short reference)
 
-## Single chat (`export.py`)
+## Setup
+
+From the shared `research/` uv project:
+
+```bash
+cd research
+uv sync --group telegram
+cp telegram_scrapper/.env.example telegram_scrapper/.env   # TELEGRAM_API_ID, TELEGRAM_API_HASH, …
+```
+
+Install all research deps (RAG + scraper + translate): `uv sync --all-groups`.
+
+## Single chat (`telegram_scrapper.export`)
+
+```bash
+cd research
+uv run python -m telegram_scrapper.export -1001350470024 --limit 1500 -o telegram_scrapper/my_export.csv
+```
 
 - Positional `chat_id`: username, `-100…` id, or `t.me` link.
 - `--limit`, `-o`, `--append`, `--tsv`.
 
-## Many chats → one CSV (`batch_export.py`)
-
-From the repo root:
+## Many chats → one CSV (`telegram_scrapper.batch_export`)
 
 ```bash
-python -m telegram_scrapper.batch_export --help
+cd research
+uv run python -m telegram_scrapper.batch_export --help
 ```
 
 - **`chats.json`**: `chats[]` entries include `last_parse_date` (UTC when the job finished that chat), `parsed_messages` (row count written in that run), `oldest_parsed_message_date` and `newest_parsed_message_date` (UTC bounds among **history** rows only; pinned/linked posts are excluded so old pins do not skew `oldest`).
@@ -27,6 +43,15 @@ python -m telegram_scrapper.batch_export --help
 - Errors on one chat are logged; the loop **continues**.
 - Merged CSV columns: `text_or_caption`, `msg_id`, `reply_to`, `chat_id`, `date_created`.
 
+## CSV validation (marimo)
+
+```bash
+cd research
+uv run marimo edit telegram_scrapper/notebooks/csv_readability.py
+```
+
+Interactive checks: row count, expected columns, dtypes, nulls, preview.
+
 ## Logging
 
 By default **`logging.ini`** is loaded: root gets a **plain** `RotatingFileHandler` on **`telegram_scrapper/logs/log.log`**. **Colored** console output is added separately via **`coloredlogs.install()`** on stdout (same format string as the file handler). Use `NO_COLOR` in the environment to disable ANSI colors.
@@ -41,4 +66,4 @@ Up to **10** pinned messages are fetched first (`InputMessagesFilterPinned` when
 
 ## Useful channel
 
-See `README.md` — [EU_pets](https://t.me/EU_pets).
+See root `README.md` — [EU_pets](https://t.me/EU_pets).

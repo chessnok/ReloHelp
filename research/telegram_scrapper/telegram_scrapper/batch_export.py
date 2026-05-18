@@ -37,9 +37,9 @@ from .export import (
 
 load_dotenv()
 
-_DIR = Path(__file__).resolve().parent
-_DEFAULT_CHATS_JSON = _DIR / "chats.json"
-_DEFAULT_MERGED_CSV = _DIR / "merged_chat_export.csv"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_CHATS_JSON = _PROJECT_ROOT / "chats.json"
+_DEFAULT_MERGED_CSV = _PROJECT_ROOT / "merged_chat_export.csv"
 
 # Skip a chat if it was successfully parsed within this many days.
 SKIP_IF_PARSED_WITHIN_DAYS = 10
@@ -272,7 +272,7 @@ async def run_batch(args: argparse.Namespace) -> None:
     if not api_id or not api_hash:
         raise SystemExit("Set TELEGRAM_API_ID and TELEGRAM_API_HASH in .env")
 
-    session_path = _DIR / session_name
+    session_path = _PROJECT_ROOT / session_name
     client = TelegramClient(str(session_path), api_id, api_hash)
 
     out_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -472,7 +472,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--logging-config",
         type=str,
-        default=str(_DIR / "logging.ini"),
+        default=str(_PROJECT_ROOT / "logging.ini"),
         help="logging.config fileConfig path (default: telegram_scrapper/logging.ini).",
     )
     p.add_argument("--tsv", action="store_true", help="Tab-separated output.")
@@ -483,7 +483,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def _configure_logging(args: argparse.Namespace) -> None:
     import coloredlogs
 
-    log_dir = _DIR / "logs"
+    log_dir = _PROJECT_ROOT / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     ini_path = Path(args.logging_config)
     level = logging.DEBUG if args.verbose else logging.INFO
