@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/test/server";
 import { testUser } from "@/test/utils";
+import { LOGIN_PASSWORD_ERROR } from "@/lib/passwordPolicy";
 import { ForgotPasswordPage } from "./ForgotPasswordPage";
 import { LoginPage } from "./LoginPage";
 import { RegisterPage } from "./RegisterPage";
@@ -90,10 +91,10 @@ describe("auth pages", () => {
     expect(screen.getByText("Home destination")).toBeInTheDocument();
   });
 
-  it("shows login API errors", async () => {
+  it("shows login API errors on the password field", async () => {
     authMock.login.mockRejectedValue({
       isAxiosError: true,
-      response: { data: { detail: "Bad credentials" } },
+      response: { status: 401, data: { detail: "Incorrect email or password" } },
     });
 
     renderAuthPage(<LoginPage />, "/login", "/login");
@@ -101,7 +102,7 @@ describe("auth pages", () => {
     await userEvent.type(screen.getByLabelText("Password"), "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(await screen.findByText("Bad credentials")).toBeInTheDocument();
+    expect(await screen.findByText(LOGIN_PASSWORD_ERROR)).toBeInTheDocument();
   });
 
   it("validates and submits the register form", async () => {
@@ -121,7 +122,7 @@ describe("auth pages", () => {
       await screen.findByText("Invalid email address"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Password must be at least 8 characters"),
+      screen.getByText("Password must be at least 8 characters long"),
     ).toBeInTheDocument();
     expect(screen.getByText("Passwords don't match")).toBeInTheDocument();
 
@@ -129,10 +130,10 @@ describe("auth pages", () => {
     await userEvent.clear(screen.getByLabelText("Password"));
     await userEvent.clear(screen.getByLabelText("Confirm Password"));
     await userEvent.type(screen.getByLabelText("Email"), "person@example.com");
-    await userEvent.type(screen.getByLabelText("Password"), "password123");
+    await userEvent.type(screen.getByLabelText("Password"), "Password1");
     await userEvent.type(
       screen.getByLabelText("Confirm Password"),
-      "password123",
+      "Password1",
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Create account" }),
@@ -141,7 +142,7 @@ describe("auth pages", () => {
     await waitFor(() =>
       expect(authMock.register).toHaveBeenCalledWith({
         email: "person@example.com",
-        password: "password123",
+        password: "Password1",
       }),
     );
     expect(screen.getByText("Login destination")).toBeInTheDocument();
@@ -152,10 +153,10 @@ describe("auth pages", () => {
 
     renderAuthPage(<RegisterPage />, "/register", "/register");
     await userEvent.type(screen.getByLabelText("Email"), "person@example.com");
-    await userEvent.type(screen.getByLabelText("Password"), "password123");
+    await userEvent.type(screen.getByLabelText("Password"), "Password1");
     await userEvent.type(
       screen.getByLabelText("Confirm Password"),
-      "password123",
+      "Password1",
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Create account" }),
@@ -211,7 +212,7 @@ describe("auth pages", () => {
       http.post(`${API}/auth/password/reset`, async ({ request }) => {
         expect(await request.json()).toEqual({
           token: "reset-token",
-          new_password: "password123",
+          new_password: "Password1",
         });
         return HttpResponse.json({ ok: true });
       }),
@@ -223,10 +224,10 @@ describe("auth pages", () => {
       "/reset-password",
     );
 
-    await userEvent.type(screen.getByLabelText("New Password"), "password123");
+    await userEvent.type(screen.getByLabelText("New Password"), "Password1");
     await userEvent.type(
       screen.getByLabelText("Confirm New Password"),
-      "password123",
+      "Password1",
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Reset password" }),
@@ -250,10 +251,10 @@ describe("auth pages", () => {
       "/reset-password?token=bad",
       "/reset-password",
     );
-    await userEvent.type(screen.getByLabelText("New Password"), "password123");
+    await userEvent.type(screen.getByLabelText("New Password"), "Password1");
     await userEvent.type(
       screen.getByLabelText("Confirm New Password"),
-      "password123",
+      "Password1",
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Reset password" }),
