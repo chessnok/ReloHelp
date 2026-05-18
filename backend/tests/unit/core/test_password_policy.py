@@ -48,11 +48,12 @@ class TestValidatePasswordStrength:
 
     def test_raises_joined_errors_on_invalid(self):
         with pytest.raises(ValueError) as exc_info:
-            validate_password_strength("x")
+            validate_password_strength("")
         message = str(exc_info.value)
         assert "8 characters" in message
         assert "uppercase" in message
         assert "lowercase" in message
+        assert "digit" in message
 
     def test_raises_on_empty_string(self):
         with pytest.raises(ValueError) as exc_info:
