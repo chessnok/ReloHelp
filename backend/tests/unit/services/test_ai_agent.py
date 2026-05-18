@@ -46,8 +46,9 @@ def _stub_instructions(monkeypatch):
 
     async def _stub(self):
         return (
-            "STUB INSTRUCTIONS: call find_official_info for official data; "
-            "rely on new, official sources only."
+            "STUB INSTRUCTIONS: call find_official_info for official data and "
+            "search_telegram_chats for community experience; rely on new, "
+            "official sources only."
         )
 
     monkeypatch.setattr(agent_mod.AIAgentService, "get_system_instructions", _stub)
@@ -115,10 +116,13 @@ def test_get_openai_without_api_key_raises(monkeypatch):
 
 
 class TestToolRegistry:
-    def test_find_official_info_in_default_tools(self):
+    def test_default_tools_contains_all_three(self):
         names = {t["function"]["name"] for t in agent_mod.DEFAULT_TOOLS}
-        assert "find_official_info" in names
-        assert "get_user_email" in names
+        assert names == {
+            "get_user_email",
+            "find_official_info",
+            "search_telegram_chats",
+        }
 
     def test_find_official_info_tool_schema(self):
         tool = agent_mod.FIND_OFFICIAL_INFO_TOOL
@@ -130,8 +134,18 @@ class TestToolRegistry:
         # user_id MUST NOT be in the schema — it's not a user-scoped tool
         assert "user_id" not in params["properties"]
 
-    def test_find_official_info_not_user_scoped(self):
+    def test_search_telegram_chats_tool_schema(self):
+        tool = agent_mod.SEARCH_TELEGRAM_CHATS_TOOL
+        assert tool["type"] == "function"
+        params = tool["function"]["parameters"]
+        assert "query" in params["properties"]
+        assert "k" in params["properties"]
+        assert params["required"] == ["query"]
+        assert "user_id" not in params["properties"]
+
+    def test_only_user_email_is_user_scoped(self):
         assert "find_official_info" not in agent_mod._USER_SCOPED_TOOLS
+        assert "search_telegram_chats" not in agent_mod._USER_SCOPED_TOOLS
         assert "get_user_email" in agent_mod._USER_SCOPED_TOOLS
 
 
@@ -192,10 +206,11 @@ class TestSystemInstructionsFetch:
         assert r2 == "FETCHED FROM MCP"
         assert calls["n"] == 1  # cached on second call
 
-    def test_fallback_is_minimal_not_duplicate(self):
-        """Fallback must be short, not a full duplicate of the MCP policy."""
+    def test_fallback_mentions_both_tools(self):
+        """Fallback must be short and mention both tools."""
         assert "find_official_info" in agent_mod._FALLBACK_INSTRUCTIONS
-        assert len(agent_mod._FALLBACK_INSTRUCTIONS) < 600
+        assert "search_telegram_chats" in agent_mod._FALLBACK_INSTRUCTIONS
+        assert len(agent_mod._FALLBACK_INSTRUCTIONS) < 800
 
 
 async def test_chat_prepends_system_message(monkeypatch):
@@ -216,10 +231,15 @@ async def test_chat_prepends_system_message(monkeypatch):
     await service.chat("hi", uuid4(), None)
 
     assert captured["messages"][0]["role"] == "system"
-    # Content comes from the stub fixture (which itself mentions find_official_info)
+    # Content comes from the stub fixture (mentions both tools)
     assert "find_official_info" in captured["messages"][0]["content"]
+    assert "search_telegram_chats" in captured["messages"][0]["content"]
     tool_names = {t["function"]["name"] for t in captured["tools"]}
-    assert tool_names == {"get_user_email", "find_official_info"}
+    assert tool_names == {
+        "get_user_email",
+        "find_official_info",
+        "search_telegram_chats",
+    }
 
 
 async def test_chat_calls_find_official_info_without_user_id(monkeypatch):
@@ -255,6 +275,41 @@ async def test_chat_calls_find_official_info_without_user_id(monkeypatch):
     # find_official_info MUST NOT receive user_id (it doesn't accept it)
     assert "user_id" not in seen["arguments"]
     assert seen["arguments"]["query"] == "Portugal D7 visa 2026"
+
+
+async def test_chat_calls_search_telegram_chats_without_user_id(monkeypatch):
+    """search_telegram_chats is not user-scoped => no user_id injection."""
+    monkeypatch.setattr(agent_mod.settings, "OPENAI_API_KEY", "sk-test", raising=False)
+    service = agent_mod.AIAgentService()
+
+    tool_call = SimpleNamespace(
+        id="t1",
+        function=SimpleNamespace(
+            name="search_telegram_chats",
+            arguments='{"query":"visa serbia","k":3}',
+        ),
+    )
+    service._openai_client = _StubAsyncOpenAI(
+        [
+            _stub_openai_response(content=None, tool_calls=[tool_call]),
+            _stub_openai_response(content="Try X [chat_id=1, date=2026-01-01]"),
+        ]
+    )
+
+    seen: dict = {}
+
+    async def fake_mcp(self, tool_name, arguments, user_id):
+        seen["tool"] = tool_name
+        seen["args"] = dict(arguments)
+        return {"hits": []}
+
+    monkeypatch.setattr(agent_mod.AIAgentService, "_call_mcp_tool", fake_mcp)
+
+    resp, _, _ = await service.chat("how to get visa in serbia?", uuid4(), None)
+    assert seen["tool"] == "search_telegram_chats"
+    assert "user_id" not in seen["args"]
+    assert seen["args"] == {"query": "visa serbia", "k": 3}
+    assert "chat_id=1" in resp
 
 
 async def test_call_mcp_tool_injects_user_id_only_for_user_scoped(monkeypatch):
@@ -297,10 +352,13 @@ async def test_call_mcp_tool_injects_user_id_only_for_user_scoped(monkeypatch):
     await service._call_mcp_tool(
         "find_official_info", {"query": "q", "user_id": "model-hallucinated"}, uid
     )
+    await service._call_mcp_tool("search_telegram_chats", {"query": "q", "k": 3}, uid)
 
     assert captured_params["get_user_email"] == {"user_id": str(uid)}
     assert "user_id" not in captured_params["find_official_info"]
     assert captured_params["find_official_info"]["query"] == "q"
+    assert "user_id" not in captured_params["search_telegram_chats"]
+    assert captured_params["search_telegram_chats"] == {"query": "q", "k": 3}
 
 
 async def test_chat_history_preserves_system_after_trim(monkeypatch):

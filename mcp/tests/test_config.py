@@ -81,3 +81,33 @@ class TestFirecrawlValidation:
         monkeypatch.setenv("FIRECRAWL_TIMEOUT_SECONDS", str(bad))
         with pytest.raises(ValidationError):
             Settings(_env_file=None)
+
+
+class TestRagTableValidation:
+    @pytest.mark.parametrize(
+        "good",
+        ["rag_threads", "x", "_under", "tbl1", "abc_123", "snake_case_name"],
+    )
+    def test_accepts_valid_identifiers(self, monkeypatch, good):
+        monkeypatch.setenv("RAG_TABLE", good)
+        assert Settings(_env_file=None).RAG_TABLE == good
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "1bad",
+            "Bad",
+            "drop table users;--",
+            "tbl name",
+            "tbl-name",
+            "tbl;",
+            "",
+            "tbl.other",
+            "tbl(x)",
+            'rag"threads',
+        ],
+    )
+    def test_rejects_invalid_identifiers(self, monkeypatch, bad):
+        monkeypatch.setenv("RAG_TABLE", bad)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None)

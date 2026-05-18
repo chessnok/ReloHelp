@@ -1,5 +1,6 @@
 .cursor
 DESIGN.md
 profiles/
+.env
 research/merged.en.csv.tmp
 research/merged.en.csv

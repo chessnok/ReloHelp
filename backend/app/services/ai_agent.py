@@ -12,8 +12,8 @@ from app.core.logger import logger
 _conversation_history: dict[str, list[dict]] = defaultdict(list)
 
 # Tools that need the authenticated user_id injected server-side.
-# Listed explicitly so we never inject user_id into tools (e.g. find_official_info)
-# that don't accept it — OpenAI would reject the extra parameter.
+# Listed explicitly so we never inject user_id into tools (e.g. find_official_info,
+# search_telegram_chats) that don't accept it — OpenAI would reject the extra parameter.
 _USER_SCOPED_TOOLS = frozenset({"get_user_email"})
 
 # Single source of truth lives in mcp/app/server.py as FastMCP(instructions=...).
@@ -24,8 +24,8 @@ _FALLBACK_INSTRUCTIONS = (
     "You are the Relohelp relocation assistant. The MCP server is currently "
     "unreachable, so authoritative tool guidance is unavailable. Always call "
     "`find_official_info` for any jurisdiction-specific question (visas, taxes, "
-    "prices, regulations, residency, healthcare). Refuse to guess; if no "
-    "official source is returned, say so explicitly."
+    "prices, regulations, residency, healthcare) and `search_telegram_chats` for "
+    "community experience. Refuse to guess; if no source is returned, say so explicitly."
 )
 
 # OpenAI tool definition for get_user_email (backend injects user_id when calling)
@@ -82,7 +82,42 @@ FIND_OFFICIAL_INFO_TOOL = {
     },
 }
 
-DEFAULT_TOOLS = [GET_USER_EMAIL_TOOL, FIND_OFFICIAL_INFO_TOOL]
+# Semantic search over indexed Telegram relocation/visa community chats.
+SEARCH_TELEGRAM_CHATS_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "search_telegram_chats",
+        "description": (
+            "Retrieves relevant snippets from indexed Telegram relocation/visa "
+            "community chats. Call this whenever the user asks about real-world "
+            "relocation, visa, residence permit, legalization, banking, or other "
+            "migration logistics. Each returned hit includes chat_id and "
+            "date_min/date_max - cite these in your answer."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural-language question; pass the user's question verbatim.",
+                },
+                "k": {
+                    "type": "integer",
+                    "description": "Number of hits to return (1..20). Default 5.",
+                    "minimum": 1,
+                    "maximum": 20,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+DEFAULT_TOOLS = [
+    GET_USER_EMAIL_TOOL,
+    FIND_OFFICIAL_INFO_TOOL,
+    SEARCH_TELEGRAM_CHATS_TOOL,
+]
 
 
 class AIAgentService:

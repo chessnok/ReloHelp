@@ -19,17 +19,30 @@ services:
   mcp:
     build: mcp
     depends_on:
+      db:
+        condition: service_healthy
       backend:
         condition: service_started
     environment:
       BACKEND_URL: http://backend:8000
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-changeme-internal-token}
       MCP_PORT: 8001
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      RAG_DATABASE_URL: postgresql://postgres:postgres@db:5432/postgres
+      RAG_TABLE: ${RAG_TABLE:-rag_threads}
+      RAG_EMBED_WORKERS: ${RAG_EMBED_WORKERS:-8}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-mxbai-embed-large}
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
+    volumes:
+      - ./research:/research:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8001:8001"
 
   db:
-    image: postgres:18-alpine
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

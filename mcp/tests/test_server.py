@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from app import server as server_module
-from app.server import _internal_headers, get_user_email, mcp
+from app.server import _internal_headers, get_user_email, mcp, search_telegram_chats
 
 VALID_UUID = "550e8400-e29b-41d4-a716-446655440000"
 
@@ -166,3 +166,120 @@ class TestGetUserEmail:
         result = await get_user_email(VALID_UUID)
 
         assert result == {"email": ""}
+
+
+class TestSearchTelegramChats:
+    async def test_registered_on_mcp(self):
+        names = {t.name for t in await mcp.list_tools()}
+        assert "search_telegram_chats" in names
+
+    async def test_returns_hits_from_rag(self, monkeypatch):
+        fake_hits = [
+            {
+                "doc_id": "thread:1:1",
+                "distance": 0.21,
+                "chat_id": 1,
+                "kind": "thread",
+                "n_msgs": 3,
+                "date_min": "2026-01-01T00:00:00Z",
+                "date_max": "2026-01-01T00:05:00Z",
+                "snippet": "visa info",
+            }
+        ]
+        monkeypatch.setattr(server_module.rag, "search", lambda q, k=5: fake_hits)
+        result = await search_telegram_chats("how to get visa", k=3)
+        assert result == {"hits": fake_hits}
+
+    async def test_empty_query_returns_error_without_calling_rag(self, monkeypatch):
+        called = {"n": 0}
+
+        def fake(q, k=5):
+            called["n"] += 1
+            return []
+
+        monkeypatch.setattr(server_module.rag, "search", fake)
+        result = await search_telegram_chats("   ")
+        assert result["hits"] == []
+        assert "Empty" in result["error"]
+        assert called["n"] == 0
+
+    async def test_rag_disabled_returns_error(self, monkeypatch):
+        from app.config import Settings
+
+        monkeypatch.setattr(
+            server_module,
+            "settings",
+            Settings(RAG_ENABLED=False, INTERNAL_API_TOKEN="t"),
+        )
+        result = await search_telegram_chats("x")
+        assert result["hits"] == []
+        assert "disabled" in result["error"].lower()
+
+    async def test_rag_exception_returns_error(self, monkeypatch):
+        def boom(q, k=5):
+            raise RuntimeError("ollama down")
+
+        monkeypatch.setattr(server_module.rag, "search", boom)
+        result = await search_telegram_chats("anything")
+        assert result["hits"] == []
+        assert "Retrieval failed" in result["error"]
+
+    async def test_rag_exception_does_not_leak_internal_message(self, monkeypatch):
+        def boom(q, k=5):
+            raise RuntimeError("postgres://user:secret@db/internal")
+
+        monkeypatch.setattr(server_module.rag, "search", boom)
+        result = await search_telegram_chats("x")
+        assert "secret" not in result["error"]
+        assert "postgres" not in result["error"]
+        assert result["error"] == "Retrieval failed"
+
+    async def test_clamps_k_above_max(self, monkeypatch):
+        seen = {}
+
+        def capture(q, k=5):
+            seen["k"] = k
+            return []
+
+        monkeypatch.setattr(server_module.rag, "search", capture)
+        await search_telegram_chats("q", k=999)
+        assert seen["k"] == server_module.settings.RAG_MAX_K
+
+    async def test_clamps_k_below_one(self, monkeypatch):
+        seen = {}
+
+        def capture(q, k=5):
+            seen["k"] = k
+            return []
+
+        monkeypatch.setattr(server_module.rag, "search", capture)
+        await search_telegram_chats("q", k=0)
+        assert seen["k"] == 1
+
+    async def test_invalid_k_type_returns_error(self, monkeypatch):
+        called = {"n": 0}
+
+        def fake(q, k=5):
+            called["n"] += 1
+            return []
+
+        monkeypatch.setattr(server_module.rag, "search", fake)
+        result = await search_telegram_chats("q", k="abc")  # type: ignore[arg-type]
+        assert result["hits"] == []
+        assert result["error"] == "Invalid k"
+        assert called["n"] == 0
+
+    async def test_offloads_sync_search_to_thread(self, monkeypatch):
+        import threading
+
+        main_tid = threading.get_ident()
+        captured = {}
+
+        def sync_search(q, k=5):
+            captured["tid"] = threading.get_ident()
+            return [{"doc_id": "x"}]
+
+        monkeypatch.setattr(server_module.rag, "search", sync_search)
+        result = await search_telegram_chats("q", k=3)
+        assert result["hits"] == [{"doc_id": "x"}]
+        assert captured["tid"] != main_tid

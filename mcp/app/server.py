@@ -4,12 +4,17 @@ Tools do NOT touch the database directly. They talk to the backend over HTTP
 using a shared INTERNAL_API_TOKEN.
 """
 
+import asyncio
+import logging
 from uuid import UUID
 
 import httpx
 from fastmcp import FastMCP
 
+from app import rag
 from app.config import FIRECRAWL_HARD_MAX_LIMIT, settings
+
+logger = logging.getLogger("app.server")
 
 SYSTEM_INSTRUCTIONS = """\
 You are the Relohelp relocation assistant.
@@ -25,7 +30,10 @@ Source-of-truth policy (MANDATORY):
 - "New" means: prefer content updated within the last 12 months. Discard
   anything stale, undated, or contradicting a more recent official source.
 - NEVER answer from training-cutoff memory for time-sensitive facts. Call
-  `find_official_info` first.
+  `find_official_info` first for jurisdiction-specific facts.
+- For real-world community experience (visa application stories, banking,
+  paperwork tips), ALSO call `search_telegram_chats` and cite chat_id +
+  date_min/date_max for each snippet you use.
 - If no official, recent source is found, say so explicitly and refuse to
   guess.
 - Always cite the source URL and its published/updated date when available.
@@ -74,6 +82,40 @@ async def get_user_email(user_id: str) -> dict:
         return {"email": "", "error": "Invalid backend response"}
 
     return {"email": data.get("email", "")}
+
+
+@mcp.tool
+async def search_telegram_chats(query: str, k: int = 5) -> dict:
+    """Retrieves relevant snippets from indexed Telegram relocation/visa chats.
+
+    Use this when the user asks about real-world relocation, visa, residence permit,
+    legalization, or other migration questions where on-the-ground community advice
+    helps. Each hit includes `chat_id` and `date_min`/`date_max` for attribution —
+    cite these in your reply.
+
+    Args:
+        query: Natural-language question (any language; Russian or English work).
+        k: Number of hits to return (1..20).
+
+    Returns:
+        {"hits": [{doc_id, distance, chat_id, kind, n_msgs, date_min, date_max, snippet}, ...]}
+        or {"hits": [], "error": "..."} if RAG is disabled / unavailable.
+    """
+    if not settings.RAG_ENABLED:
+        return {"hits": [], "error": "RAG retrieval is disabled"}
+    if not isinstance(query, str) or not query.strip():
+        return {"hits": [], "error": "Empty query"}
+    try:
+        k_int = int(k)
+    except (TypeError, ValueError):
+        return {"hits": [], "error": "Invalid k"}
+    k_clamped = max(1, min(k_int, settings.RAG_MAX_K))
+    try:
+        hits = await asyncio.to_thread(rag.search, query, k=k_clamped)
+    except Exception as exc:
+        logger.exception("rag.search failed: %s", exc)
+        return {"hits": [], "error": "Retrieval failed"}
+    return {"hits": hits}
 
 
 @mcp.tool
