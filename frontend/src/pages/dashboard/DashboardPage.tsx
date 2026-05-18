@@ -36,24 +36,21 @@ export const DashboardPage: React.FC = () => {
           <p className="text-[13px] font-medium uppercase tracking-[0.18em] text-terracotta">
             {user?.email ? `Welcome, ${user.email}` : "Welcome back"}
           </p>
-          <h1 className="font-display mt-4 text-[44px] leading-[1.05] tracking-[-0.025em] text-ink sm:text-[64px]">
+          <h1 className="font-display mt-4 text-[44px] leading-[1.08] tracking-[-0.01em] text-ink sm:text-[64px]">
             Your move,
             <br />
             answered clearly.
           </h1>
-          <p className="mt-6 max-w-xl text-[17px] leading-[1.5] text-muted-stone">
+          <p className="mt-6 max-w-xl font-sans text-[18px] leading-[1.6] tracking-normal text-muted-stone">
             A calm, focused workspace for everything that goes into relocating —
             paperwork, decisions, and what to do next.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-8">
             <Button asChild size="lg">
               <Link to="/chat">
                 Open chat
                 <ArrowRight className="ml-1 size-4" />
               </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <Link to="/chat">Browse templates</Link>
             </Button>
           </div>
         </div>
@@ -70,10 +67,10 @@ export const DashboardPage: React.FC = () => {
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-fog text-ink">
                 <Icon className="size-5" />
               </div>
-              <h2 className="font-display mt-6 text-[24px] leading-tight tracking-tight text-ink">
+              <h2 className="font-display mt-6 text-[24px] leading-tight tracking-[-0.01em] text-ink">
                 {feature.title}
               </h2>
-              <p className="mt-3 text-[15px] leading-[1.55] text-muted-stone">
+              <p className="mt-3 font-sans text-[16px] leading-[1.6] tracking-normal text-muted-stone">
                 {feature.body}
               </p>
             </article>
@@ -84,10 +81,10 @@ export const DashboardPage: React.FC = () => {
       <section className="surface-fog rounded-3xl px-8 py-10 sm:px-12">
         <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-center">
           <div className="max-w-xl">
-            <h2 className="font-display text-[28px] leading-tight tracking-tight text-ink">
+            <h2 className="font-display text-[28px] leading-tight tracking-[-0.01em] text-ink">
               Ready when you are.
             </h2>
-            <p className="mt-2 text-[15px] text-muted-stone">
+            <p className="mt-2 font-sans text-[16px] leading-[1.6] tracking-normal text-muted-stone">
               Pick up where you left off, or start a fresh conversation.
             </p>
           </div>

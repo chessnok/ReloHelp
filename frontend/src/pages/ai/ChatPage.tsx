@@ -125,8 +125,10 @@ export const ChatPage: React.FC = () => {
               )}
               <div
                 className={cn(
-                  "max-w-[85%] rounded-3xl px-5 py-3 text-[15px] leading-[1.55]",
-                  m.role === "user" ? "bg-ink text-canvas" : "bg-fog text-ink",
+                  "max-w-[85%] select-text rounded-3xl px-5 py-3 text-[15px] leading-[1.55]",
+                  m.role === "user"
+                    ? "bg-ink text-canvas selection:bg-canvas selection:text-ink"
+                    : "bg-fog text-ink selection:bg-ink/15",
                 )}
               >
                 {m.role === "assistant" ? (

@@ -71,7 +71,7 @@ export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
     <div
       data-testid="chat-markdown"
       className={cn(
-        "prose-chat space-y-2 text-[15px] leading-[1.55] break-words",
+        "prose-chat select-text space-y-2 text-[15px] leading-[1.55] break-words",
         "[&_p]:m-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
         "[&_pre]:overflow-x-auto [&_pre]:rounded-2xl [&_pre]:bg-ink/5 [&_pre]:p-3 [&_pre]:text-[13px]",
         "[&_code]:rounded [&_code]:bg-ink/5 [&_code]:px-1 [&_code]:py-[1px] [&_code]:text-[13px]",
