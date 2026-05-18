@@ -56,7 +56,12 @@ class MessageService:
         conversation_id: UUID,
         limit: int,
     ) -> list[dict[str, Any]]:
-        """Return last `limit` messages oldest-first as OpenAI-formatted dicts."""
+        """Return last `limit` messages oldest-first as OpenAI-formatted dicts.
+
+        Sanitizes tool_call boundaries so the slice cannot start with an orphan
+        `tool` message or end with an assistant `tool_calls` group whose tool
+        responses got truncated — OpenAI rejects both shapes with HTTP 400.
+        """
         result = await db.execute(
             select(Message)
             .where(Message.conversation_id == conversation_id)
@@ -65,7 +70,48 @@ class MessageService:
         )
         rows = list(result.scalars().all())
         rows.reverse()
-        return [_to_openai_dict(r) for r in rows]
+        history = [_to_openai_dict(r) for r in rows]
+        return _sanitize_tool_groups(history)
+
+
+def _sanitize_tool_groups(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop orphan `tool` messages and incomplete assistant tool_calls groups.
+
+    A truncated LIMIT slice can produce two shapes that OpenAI rejects:
+      - `tool` message whose `tool_call_id` has no matching preceding
+        assistant `tool_calls` entry within the slice.
+      - assistant `tool_calls` whose tool responses got cut off.
+    """
+    out: list[dict[str, Any]] = []
+    i = 0
+    n = len(history)
+    while i < n:
+        m = history[i]
+        role = m.get("role")
+        if role == "tool":
+            i += 1
+            continue
+        if role == "assistant" and m.get("tool_calls"):
+            tc_ids = {tc["id"] for tc in m["tool_calls"] if tc.get("id")}
+            j = i + 1
+            tool_msgs: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            while j < n and history[j].get("role") == "tool":
+                tid = history[j].get("tool_call_id")
+                if tid and tid in tc_ids and tid not in seen:
+                    tool_msgs.append(history[j])
+                    seen.add(tid)
+                j += 1
+            if seen == tc_ids and tc_ids:
+                out.append(m)
+                out.extend(tool_msgs)
+            elif m.get("content"):
+                out.append({"role": "assistant", "content": m["content"]})
+            i = j
+            continue
+        out.append(m)
+        i += 1
+    return out
 
 
 def _to_openai_dict(msg: Message) -> dict[str, Any]:
