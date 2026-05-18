@@ -7,7 +7,13 @@ import pytest
 import respx
 
 from app import server as server_module
-from app.server import _internal_headers, get_user_email, mcp, search_telegram_chats
+from app.server import (
+    _internal_headers,
+    get_user_email,
+    get_user_memory,
+    mcp,
+    search_telegram_chats,
+)
 
 VALID_UUID = "550e8400-e29b-41d4-a716-446655440000"
 
@@ -283,3 +289,149 @@ class TestSearchTelegramChats:
         result = await search_telegram_chats("q", k=3)
         assert result["hits"] == [{"doc_id": "x"}]
         assert captured["tid"] != main_tid
+
+
+_MEMORIES_URL = f"http://backend.test/api/v1/internal/users/{VALID_UUID}/memories"
+
+
+class TestGetUserMemory:
+    async def test_invalid_uuid_returns_error_without_http_call(
+        self, mcp_settings, respx_mock
+    ):
+        result = await get_user_memory("not-a-uuid")
+        assert result == {"memories": [], "error": "Invalid user_id format"}
+        assert len(respx_mock.calls) == 0
+
+    @respx.mock
+    async def test_list_mode_happy_path(self, mcp_settings):
+        route = respx.get(_MEMORIES_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "memories": [
+                        {"id": "m1", "kind": "fact", "content": "User from RU"}
+                    ]
+                },
+            )
+        )
+        result = await get_user_memory(VALID_UUID)
+        assert result == {
+            "memories": [{"id": "m1", "kind": "fact", "content": "User from RU"}]
+        }
+        assert route.called
+        req = route.calls.last.request
+        assert "query" not in req.url.params
+        assert "kind" not in req.url.params
+        assert req.url.params["top_k"] == "10"
+        assert req.headers.get("X-Internal-Token") == "test-token"
+
+    @respx.mock
+    async def test_query_mode_forwards_query(self, mcp_settings):
+        route = respx.get(_MEMORIES_URL).mock(
+            return_value=httpx.Response(200, json={"memories": []})
+        )
+        await get_user_memory(VALID_UUID, query="where am I from")
+        req = route.calls.last.request
+        assert req.url.params["query"] == "where am I from"
+        assert "kind" not in req.url.params
+
+    @respx.mock
+    async def test_query_overrides_kind(self, mcp_settings):
+        route = respx.get(_MEMORIES_URL).mock(
+            return_value=httpx.Response(200, json={"memories": []})
+        )
+        await get_user_memory(VALID_UUID, query="x", kind="fact")
+        req = route.calls.last.request
+        assert req.url.params["query"] == "x"
+        assert "kind" not in req.url.params
+
+    @respx.mock
+    async def test_kind_only(self, mcp_settings):
+        route = respx.get(_MEMORIES_URL).mock(
+            return_value=httpx.Response(200, json={"memories": []})
+        )
+        await get_user_memory(VALID_UUID, kind="event")
+        req = route.calls.last.request
+        assert req.url.params["kind"] == "event"
+        assert "query" not in req.url.params
+
+    @respx.mock
+    async def test_top_k_clamped_low(self, mcp_settings):
+        route = respx.get(_MEMORIES_URL).mock(
+            return_value=httpx.Response(200, json={"memories": []})
+        )
+        await get_user_memory(VALID_UUID, top_k=0)
+        assert route.calls.last.request.url.params["top_k"] == "1"
+
+    @respx.mock
+    async def test_top_k_clamped_high(self, mcp_settings):
+        route = respx.get(_MEMORIES_URL).mock(
+            return_value=httpx.Response(200, json={"memories": []})
+        )
+        await get_user_memory(VALID_UUID, top_k=999)
+        assert route.calls.last.request.url.params["top_k"] == "50"
+
+    @respx.mock
+    async def test_401_returns_unauthorized(self, mcp_settings):
+        respx.get(_MEMORIES_URL).mock(return_value=httpx.Response(401))
+        result = await get_user_memory(VALID_UUID)
+        assert result == {
+            "memories": [],
+            "error": "Unauthorized (internal token invalid)",
+        }
+
+    @respx.mock
+    async def test_400_returns_bad_request(self, mcp_settings):
+        respx.get(_MEMORIES_URL).mock(return_value=httpx.Response(400))
+        result = await get_user_memory(VALID_UUID)
+        assert result == {
+            "memories": [],
+            "error": "Bad request (invalid kind or id)",
+        }
+
+    @respx.mock
+    @pytest.mark.parametrize("status", [403, 422, 500, 502, 503])
+    async def test_other_error_statuses(self, mcp_settings, status):
+        respx.get(_MEMORIES_URL).mock(return_value=httpx.Response(status))
+        result = await get_user_memory(VALID_UUID)
+        assert result == {"memories": [], "error": f"Backend error: {status}"}
+
+    @respx.mock
+    async def test_network_failure(self, mcp_settings):
+        respx.get(_MEMORIES_URL).mock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
+        result = await get_user_memory(VALID_UUID)
+        assert result["memories"] == []
+        assert result["error"].startswith("Backend unreachable:")
+
+    @respx.mock
+    async def test_invalid_json(self, mcp_settings):
+        respx.get(_MEMORIES_URL).mock(
+            return_value=httpx.Response(
+                200, content=b"not-json", headers={"content-type": "text/plain"}
+            )
+        )
+        result = await get_user_memory(VALID_UUID)
+        assert result == {"memories": [], "error": "Invalid backend response"}
+
+    @respx.mock
+    async def test_response_missing_memories_field(self, mcp_settings):
+        respx.get(_MEMORIES_URL).mock(
+            return_value=httpx.Response(200, json={"other": "field"})
+        )
+        result = await get_user_memory(VALID_UUID)
+        assert result == {"memories": []}
+
+    async def test_tool_registered(self):
+        tools = await mcp.list_tools()
+        names = {t.name for t in tools}
+        assert "get_user_memory" in names
+
+    async def test_tool_has_description(self):
+        tool = await mcp.get_tool("get_user_memory")
+        assert tool is not None
+        assert tool.description
+        assert (
+            "memory" in tool.description.lower() or "facts" in tool.description.lower()
+        )

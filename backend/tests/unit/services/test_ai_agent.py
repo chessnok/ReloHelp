@@ -116,13 +116,30 @@ def test_get_openai_without_api_key_raises(monkeypatch):
 
 
 class TestToolRegistry:
-    def test_default_tools_contains_all_three(self):
+    def test_default_tools_contains_all_four(self):
         names = {t["function"]["name"] for t in agent_mod.DEFAULT_TOOLS}
         assert names == {
             "get_user_email",
+            "get_user_memory",
             "find_official_info",
             "search_telegram_chats",
         }
+
+    def test_get_user_memory_tool_schema(self):
+        tool = agent_mod.GET_USER_MEMORY_TOOL
+        assert tool["type"] == "function"
+        params = tool["function"]["parameters"]
+        assert "user_id" in params["properties"]
+        assert "query" in params["properties"]
+        assert "kind" in params["properties"]
+        assert "top_k" in params["properties"]
+        assert params["required"] == ["user_id"]
+        assert params["properties"]["kind"]["enum"] == [
+            "fact",
+            "preference",
+            "event",
+            "summary",
+        ]
 
     def test_find_official_info_tool_schema(self):
         tool = agent_mod.FIND_OFFICIAL_INFO_TOOL
@@ -143,10 +160,11 @@ class TestToolRegistry:
         assert params["required"] == ["query"]
         assert "user_id" not in params["properties"]
 
-    def test_only_user_email_is_user_scoped(self):
+    def test_only_user_email_and_user_memory_are_user_scoped(self):
         assert "find_official_info" not in agent_mod._USER_SCOPED_TOOLS
         assert "search_telegram_chats" not in agent_mod._USER_SCOPED_TOOLS
         assert "get_user_email" in agent_mod._USER_SCOPED_TOOLS
+        assert "get_user_memory" in agent_mod._USER_SCOPED_TOOLS
 
 
 class TestSystemInstructionsFetch:
@@ -237,6 +255,7 @@ async def test_chat_prepends_system_message(monkeypatch):
     tool_names = {t["function"]["name"] for t in captured["tools"]}
     assert tool_names == {
         "get_user_email",
+        "get_user_memory",
         "find_official_info",
         "search_telegram_chats",
     }
