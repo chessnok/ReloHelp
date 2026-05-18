@@ -60,6 +60,7 @@ write_remote_env() {
   echo "==> write $REMOTE_DIR/.env on server"
   local ns
   ns="$(ghcr_namespace_lower)"
+  local rag_db_url="${RAG_DATABASE_URL:-postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}}"
   ssh_run "cat > $REMOTE_DIR/.env" <<EOF
 GHCR_NAMESPACE=${ns}
 IMAGE_TAG=${IMAGE_TAG}
@@ -69,6 +70,11 @@ DB_PASSWORD=${DB_PASSWORD}
 DB_NAME=${DB_NAME}
 FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-}
 FIRECRAWL_API_URL=${FIRECRAWL_API_URL:-https://api.firecrawl.dev}
+OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+RAG_EMBED_DIM=${RAG_EMBED_DIM:-768}
+RAG_TABLE=${RAG_TABLE:-rag_threads}
+RAG_DATABASE_URL=${rag_db_url}
 EOF
 }
 
