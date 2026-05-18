@@ -137,7 +137,11 @@ def test_sanitize_drops_trailing_incomplete_tool_calls_without_content():
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "t1", "type": "function", "function": {"name": "x", "arguments": "{}"}}
+                {
+                    "id": "t1",
+                    "type": "function",
+                    "function": {"name": "x", "arguments": "{}"},
+                }
             ],
         },
     ]
@@ -152,7 +156,11 @@ def test_sanitize_keeps_trailing_assistant_content_when_tool_calls_truncated():
             "role": "assistant",
             "content": "partial answer",
             "tool_calls": [
-                {"id": "t1", "type": "function", "function": {"name": "x", "arguments": "{}"}}
+                {
+                    "id": "t1",
+                    "type": "function",
+                    "function": {"name": "x", "arguments": "{}"},
+                }
             ],
         },
     ]
@@ -169,7 +177,11 @@ def test_sanitize_preserves_complete_tool_group():
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "t1", "type": "function", "function": {"name": "x", "arguments": "{}"}}
+                {
+                    "id": "t1",
+                    "type": "function",
+                    "function": {"name": "x", "arguments": "{}"},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": "t1", "content": '{"ok":1}'},
@@ -186,8 +198,16 @@ def test_sanitize_partial_tool_responses_drops_group():
             "role": "assistant",
             "content": None,
             "tool_calls": [
-                {"id": "t1", "type": "function", "function": {"name": "a", "arguments": "{}"}},
-                {"id": "t2", "type": "function", "function": {"name": "b", "arguments": "{}"}},
+                {
+                    "id": "t1",
+                    "type": "function",
+                    "function": {"name": "a", "arguments": "{}"},
+                },
+                {
+                    "id": "t2",
+                    "type": "function",
+                    "function": {"name": "b", "arguments": "{}"},
+                },
             ],
         },
         {"role": "tool", "tool_call_id": "t1", "content": '{"ok":1}'},
