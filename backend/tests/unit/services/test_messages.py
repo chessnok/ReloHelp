@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.db.models.message import Message
-from app.services.messages import MessageService, _to_openai_dict
+from app.services.messages import MessageService, _sanitize_tool_groups, _to_openai_dict
 
 
 async def test_ensure_conversation_creates_when_missing(db_session, make_user):
@@ -118,6 +118,84 @@ async def test_append_method_persists(db_session, make_user):
     history = await svc.load_history(db_session, conv_id, limit=10)
     assert len(history) == 1
     assert history[0]["content"] == "hello"
+
+
+def test_sanitize_drops_leading_orphan_tool_message():
+    history = [
+        {"role": "tool", "tool_call_id": "t1", "content": '{"x":1}'},
+        {"role": "assistant", "content": "answer"},
+        {"role": "user", "content": "next"},
+    ]
+    out = _sanitize_tool_groups(history)
+    assert [m["role"] for m in out] == ["assistant", "user"]
+
+
+def test_sanitize_drops_trailing_incomplete_tool_calls_without_content():
+    history = [
+        {"role": "user", "content": "ask"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "t1", "type": "function", "function": {"name": "x", "arguments": "{}"}}
+            ],
+        },
+    ]
+    out = _sanitize_tool_groups(history)
+    assert [m["role"] for m in out] == ["user"]
+
+
+def test_sanitize_keeps_trailing_assistant_content_when_tool_calls_truncated():
+    history = [
+        {"role": "user", "content": "ask"},
+        {
+            "role": "assistant",
+            "content": "partial answer",
+            "tool_calls": [
+                {"id": "t1", "type": "function", "function": {"name": "x", "arguments": "{}"}}
+            ],
+        },
+    ]
+    out = _sanitize_tool_groups(history)
+    assert [m["role"] for m in out] == ["user", "assistant"]
+    assert "tool_calls" not in out[1]
+    assert out[1]["content"] == "partial answer"
+
+
+def test_sanitize_preserves_complete_tool_group():
+    history = [
+        {"role": "user", "content": "ask"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "t1", "type": "function", "function": {"name": "x", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "t1", "content": '{"ok":1}'},
+        {"role": "assistant", "content": "final"},
+    ]
+    out = _sanitize_tool_groups(history)
+    assert [m["role"] for m in out] == ["user", "assistant", "tool", "assistant"]
+
+
+def test_sanitize_partial_tool_responses_drops_group():
+    history = [
+        {"role": "user", "content": "ask"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "t1", "type": "function", "function": {"name": "a", "arguments": "{}"}},
+                {"id": "t2", "type": "function", "function": {"name": "b", "arguments": "{}"}},
+            ],
+        },
+        {"role": "tool", "tool_call_id": "t1", "content": '{"ok":1}'},
+        {"role": "assistant", "content": "next"},
+    ]
+    out = _sanitize_tool_groups(history)
+    assert [m["role"] for m in out] == ["user", "assistant"]
+    assert out[1]["content"] == "next"
 
 
 def test_to_openai_dict_skips_falsy_optional_fields():
