@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert } from "@/components/ui/alert";
 import { chat } from "@/api/ai";
 import { useChat } from "@/context/ChatContext";
+import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 import { cn } from "@/lib/utils";
 
 const MAX_TITLE_LENGTH = 50;
@@ -128,7 +129,11 @@ export const ChatPage: React.FC = () => {
                   m.role === "user" ? "bg-ink text-canvas" : "bg-fog text-ink",
                 )}
               >
-                <p className="whitespace-pre-wrap">{m.content}</p>
+                {m.role === "assistant" ? (
+                  <ChatMarkdown content={m.content} />
+                ) : (
+                  <p className="whitespace-pre-wrap">{m.content}</p>
+                )}
               </div>
               {m.role === "user" && (
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink text-canvas">

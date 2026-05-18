@@ -63,7 +63,6 @@ filterwarnings = [
 source = ["app"]
 concurrency = ["thread", "greenlet"]
 omit = [
-    "app/mcp/*",
     "app/main.py",
     "app/core/langfuse_client.py",
     "app/core/logger.py",
