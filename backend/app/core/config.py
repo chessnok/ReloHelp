@@ -106,7 +106,7 @@ class Settings(BaseSettings):
     MEMORY_EMBED_MODEL: str = "nomic-embed-text"
     MEMORY_EMBED_DIM: int = 768
     MEMORY_TOP_K: int = 5
-    MEMORY_MIN_SIMILARITY: float = 0.7
+    MEMORY_MIN_SIMILARITY: float = 0.5
     MEMORY_DEDUPE_SIMILARITY: float = 0.95
     MEMORY_EXTRACTION_MODEL: str | None = None  # falls back to OPENAI_MODEL when None
     MEMORY_HISTORY_LIMIT: int = 20
