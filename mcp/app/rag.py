@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import atexit
 import logging
+import threading
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -27,6 +28,7 @@ logger = logging.getLogger("app.rag")
 _ollama_client: Any = None
 _pool: Any = None
 _schema_initialized: bool = False
+_schema_lock = threading.Lock()
 
 
 def _get_ollama():
@@ -67,35 +69,38 @@ def _ensure_schema() -> None:
     global _schema_initialized
     if _schema_initialized:
         return
-    from pgvector.psycopg import register_vector
+    with _schema_lock:
+        if _schema_initialized:
+            return
+        from pgvector.psycopg import register_vector
 
-    pool = _get_pool()
-    table = settings.RAG_TABLE
-    dim = int(settings.RAG_EMBED_DIM)
-    with pool.connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-        conn.commit()
-        register_vector(conn)
-        with conn.cursor() as cur:
-            cur.execute(f"""
-                CREATE TABLE IF NOT EXISTS {table} (
-                    doc_id     text PRIMARY KEY,
-                    chat_id    bigint,
-                    kind       text,
-                    n_msgs     integer,
-                    date_min   text,
-                    date_max   text,
-                    snippet    text,
-                    embedding  vector({dim})
-                );
-                """)
-            cur.execute(
-                f"CREATE INDEX IF NOT EXISTS {table}_embedding_idx "
-                f"ON {table} USING hnsw (embedding vector_cosine_ops);"
-            )
-        conn.commit()
-    _schema_initialized = True
+        pool = _get_pool()
+        table = settings.RAG_TABLE
+        dim = int(settings.RAG_EMBED_DIM)
+        with pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            conn.commit()
+            register_vector(conn)
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
+                        doc_id     text PRIMARY KEY,
+                        chat_id    bigint,
+                        kind       text,
+                        n_msgs     integer,
+                        date_min   text,
+                        date_max   text,
+                        snippet    text,
+                        embedding  vector({dim})
+                    );
+                    """)
+                cur.execute(
+                    f"CREATE INDEX IF NOT EXISTS {table}_embedding_idx "
+                    f"ON {table} USING hnsw (embedding vector_cosine_ops);"
+                )
+            conn.commit()
+        _schema_initialized = True
 
 
 def _checkout_conn():

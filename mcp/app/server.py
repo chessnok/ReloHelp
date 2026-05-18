@@ -4,6 +4,7 @@ Tools do NOT touch the database directly. They talk to the backend over HTTP
 using a shared INTERNAL_API_TOKEN.
 """
 
+import asyncio
 import logging
 from uuid import UUID
 
@@ -105,10 +106,15 @@ async def search_telegram_chats(query: str, k: int = 5) -> dict:
     if not isinstance(query, str) or not query.strip():
         return {"hits": [], "error": "Empty query"}
     try:
-        hits = rag.search(query, k=k)
+        k_int = int(k)
+    except (TypeError, ValueError):
+        return {"hits": [], "error": "Invalid k"}
+    k_clamped = max(1, min(k_int, settings.RAG_MAX_K))
+    try:
+        hits = await asyncio.to_thread(rag.search, query, k=k_clamped)
     except Exception as exc:
         logger.exception("rag.search failed: %s", exc)
-        return {"hits": [], "error": f"Retrieval failed: {exc}"}
+        return {"hits": [], "error": "Retrieval failed"}
     return {"hits": hits}
 
 

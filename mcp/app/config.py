@@ -1,9 +1,13 @@
 """MCP server configuration. Loaded from environment / .env."""
 
+import re
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 FIRECRAWL_HARD_MAX_LIMIT = 100
+
+_SQL_IDENT_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 
 
 class Settings(BaseSettings):
@@ -34,6 +38,15 @@ class Settings(BaseSettings):
     FIRECRAWL_API_URL: str = "https://api.firecrawl.dev"
     FIRECRAWL_TIMEOUT_SECONDS: float = 30.0
     FIRECRAWL_SEARCH_LIMIT: int = 5
+
+    @field_validator("RAG_TABLE")
+    @classmethod
+    def _validate_rag_table(cls, v: str) -> str:
+        if not _SQL_IDENT_RE.match(v):
+            raise ValueError(
+                f"RAG_TABLE must match {_SQL_IDENT_RE.pattern!r}, got {v!r}"
+            )
+        return v
 
     @field_validator("FIRECRAWL_SEARCH_LIMIT")
     @classmethod

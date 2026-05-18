@@ -337,3 +337,71 @@ class TestIngest:
             written = rag.ingest(self._make_docs(["a"]))
             assert written == 0
             et.assert_not_called()
+
+
+class TestEnsureSchemaRace:
+    def test_concurrent_calls_initialize_schema_once(self, monkeypatch):
+        import sys
+        import threading
+        import types
+
+        monkeypatch.setattr(rag, "_schema_initialized", False)
+        call_count = {"n": 0}
+        block = threading.Event()
+        first_in = threading.Event()
+
+        class FakeCur:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def execute(self, *_a, **_k):
+                return None
+
+        class FakeConn:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def cursor(self):
+                return FakeCur()
+
+            def commit(self):
+                return None
+
+        class FakePool:
+            def connection(self):
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    first_in.set()
+                    block.wait(timeout=2)
+                return FakeConn()
+
+        monkeypatch.setattr(rag, "_get_pool", lambda: FakePool())
+        fake_mod = types.ModuleType("pgvector.psycopg")
+        fake_mod.register_vector = lambda *_a, **_k: None  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "pgvector", types.ModuleType("pgvector"))
+        monkeypatch.setitem(sys.modules, "pgvector.psycopg", fake_mod)
+
+        results = []
+
+        def worker():
+            rag._ensure_schema()
+            results.append(True)
+
+        t1 = threading.Thread(target=worker)
+        t2 = threading.Thread(target=worker)
+        t1.start()
+        first_in.wait(timeout=2)
+        t2.start()
+        block.set()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert len(results) == 2
+        assert call_count["n"] == 1
+        assert rag._schema_initialized is True
