@@ -94,7 +94,10 @@ describe("auth pages", () => {
   it("shows login API errors on the password field", async () => {
     authMock.login.mockRejectedValue({
       isAxiosError: true,
-      response: { status: 401, data: { detail: "Incorrect email or password" } },
+      response: {
+        status: 401,
+        data: { detail: "Incorrect email or password" },
+      },
     });
 
     renderAuthPage(<LoginPage />, "/login", "/login");

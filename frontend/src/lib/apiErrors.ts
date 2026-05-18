@@ -1,7 +1,10 @@
 import axios from "axios";
 
 /** Turn FastAPI `detail` (string or validation array) into display text. */
-export function formatApiErrorDetail(detail: unknown, fallback: string): string {
+export function formatApiErrorDetail(
+  detail: unknown,
+  fallback: string,
+): string {
   if (typeof detail === "string") {
     return detail;
   }
