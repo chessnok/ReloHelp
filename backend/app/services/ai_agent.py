@@ -19,7 +19,7 @@ _conversation_history: dict[str, list[dict]] = defaultdict(list)
 # Tools that need the authenticated user_id injected server-side.
 # Listed explicitly so we never inject user_id into tools (e.g. find_official_info,
 # search_telegram_chats) that don't accept it — OpenAI would reject the extra parameter.
-_USER_SCOPED_TOOLS = frozenset({"get_user_email"})
+_USER_SCOPED_TOOLS = frozenset({"get_user_email", "get_user_memory"})
 
 # Single source of truth lives in mcp/app/server.py as FastMCP(instructions=...).
 # Backend fetches it via MCP `initialize` and caches in the service singleton.
@@ -27,10 +27,12 @@ _USER_SCOPED_TOOLS = frozenset({"get_user_email"})
 # chat call; it must not duplicate the policy in detail (drift risk).
 _FALLBACK_INSTRUCTIONS = (
     "You are the Relohelp relocation assistant. The MCP server is currently "
-    "unreachable, so authoritative tool guidance is unavailable. Always call "
-    "`find_official_info` for any jurisdiction-specific question (visas, taxes, "
-    "prices, regulations, residency, healthcare) and `search_telegram_chats` for "
-    "community experience. Refuse to guess; if no source is returned, say so explicitly."
+    "unreachable, so authoritative tool guidance is unavailable. Call "
+    "`get_user_memory` first for any question about the user's situation "
+    "(do NOT pass user_id; the backend injects it). Call `find_official_info` "
+    "for jurisdiction-specific questions (visas, taxes, prices, regulations, "
+    "residency, healthcare). Call `search_telegram_chats` for community "
+    "experience. Refuse to guess; if no source is returned, say so explicitly."
 )
 
 GET_USER_EMAIL_TOOL = {
@@ -116,8 +118,56 @@ SEARCH_TELEGRAM_CHATS_TOOL = {
     },
 }
 
+GET_USER_MEMORY_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_user_memory",
+        "description": (
+            "Retrieves durable facts stored about the authenticated user "
+            "(things they told us in earlier chats: target country, family, "
+            "deadlines, visa type, preferences, prior steps). Call this when "
+            "the user asks what you know about them, when you need a list "
+            "filtered by kind (e.g. only `event` rows for a timeline), or "
+            "when the auto-injected memory snippet looks incomplete and you "
+            "want a broader lookup. `user_id` is injected by the system — "
+            "do NOT pass it yourself."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "user_id": {
+                    "type": "string",
+                    "description": "The UUID of the user (injected by system).",
+                },
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Optional natural-language query for semantic "
+                        "search. Leave empty to list memories."
+                    ),
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": ["fact", "preference", "event", "summary"],
+                    "description": (
+                        "Optional filter by kind. Ignored if `query` is set."
+                    ),
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Max memories to return (1..50). Default 10.",
+                    "minimum": 1,
+                    "maximum": 50,
+                },
+            },
+            "required": ["user_id"],
+        },
+    },
+}
+
 DEFAULT_TOOLS = [
     GET_USER_EMAIL_TOOL,
+    GET_USER_MEMORY_TOOL,
     FIND_OFFICIAL_INFO_TOOL,
     SEARCH_TELEGRAM_CHATS_TOOL,
 ]

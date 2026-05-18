@@ -19,6 +19,27 @@ logger = logging.getLogger("app.server")
 SYSTEM_INSTRUCTIONS = """\
 You are the Relohelp relocation assistant.
 
+User-context policy (MANDATORY, run BEFORE every substantive answer):
+- The backend automatically injects a short "Known facts about the user"
+  block into your system prompt when it has high-confidence hits. Treat
+  that block as authoritative for the user's personal context (current
+  country, target country, family, deadlines, profession, visa type,
+  budget, language, prior steps). NEVER ask the user to repeat anything
+  that block already states.
+- When the user asks anything personal ("what do you know about me?",
+  "where am I from?", "what's my visa?", "remind me what we agreed on"),
+  OR when answering a question whose answer materially depends on the
+  user's situation (best visa for THEIR profile, timeline based on
+  THEIR deadline, eligibility for THEIR family size), call
+  `get_user_memory` FIRST. Pass a natural-language `query` describing
+  what you need ("target country", "family composition", "deadlines"),
+  or filter by `kind` (`fact`, `preference`, `event`, `summary`).
+  Never invent or guess personal facts that aren't in the injected
+  block or returned by the tool — if a needed fact is missing, ask the
+  user once and continue.
+- Do NOT pass `user_id` to `get_user_memory` yourself — the backend
+  injects the authenticated user. Anything you pass would be overridden.
+
 Source-of-truth policy (MANDATORY):
 - Rely ONLY on NEW and OFFICIAL data when answering questions about visas,
   taxes, prices, regulations, residency, healthcare, or any other
@@ -44,6 +65,14 @@ Source-of-truth policy (MANDATORY):
 - Always cite the source URL and its published/updated date for OFFICIAL
   sources from `find_official_info`. Community/Telegram snippets are
   paraphrased without URLs or identifiers.
+
+Tool-selection cheat sheet:
+- Personal question or query depending on user's situation → `get_user_memory`
+- Jurisdiction / official fact → `find_official_info`
+- Real-world community experience → `search_telegram_chats`
+- User explicitly asks for their email → `get_user_email`
+You may call multiple tools in a single turn when both personal context
+and external data are needed.
 """
 
 mcp = FastMCP("Relohelp MCP Server", instructions=SYSTEM_INSTRUCTIONS)
@@ -89,6 +118,82 @@ async def get_user_email(user_id: str) -> dict:
         return {"email": "", "error": "Invalid backend response"}
 
     return {"email": data.get("email", "")}
+
+
+@mcp.tool
+async def get_user_memory(
+    user_id: str,
+    query: str | None = None,
+    kind: str | None = None,
+    top_k: int = 10,
+) -> dict:
+    """Retrieve durable facts the assistant has stored about the user.
+
+    Use this when:
+    - the user asks what you know about them ("what do you remember about me?"),
+    - you need to pull a list of stored items by kind (e.g. all `event`
+      rows when planning a timeline), or
+    - the current turn's auto-injected memory snippet looks incomplete and
+      you want a broader lookup.
+
+    Args:
+        user_id: UUID of the authenticated user (injected by the backend).
+        query: Optional natural-language query. When set, runs a semantic
+            cosine search; `kind` is ignored. When empty, returns memories
+            ordered by created_at desc.
+        kind: Optional filter, one of {"fact", "preference", "event",
+            "summary"}. Ignored if `query` is set.
+        top_k: Max number of memories to return (1..50). Default 10.
+
+    Returns:
+        {"memories": [{id, kind, content, similarity?, metadata, created_at?}, ...]}
+        or {"memories": [], "error": "..."} on failure.
+    """
+    try:
+        UUID(user_id)
+    except ValueError:
+        return {"memories": [], "error": "Invalid user_id format"}
+
+    try:
+        top_k_int = int(top_k) if top_k is not None else 10
+    except (TypeError, ValueError):
+        top_k_int = 10
+    params: dict[str, str | int] = {"top_k": max(1, min(top_k_int, 50))}
+    if query and query.strip():
+        params["query"] = query.strip()
+    elif kind:
+        params["kind"] = kind
+
+    url = (
+        f"{settings.BACKEND_URL.rstrip('/')}"
+        f"/api/v1/internal/users/{user_id}/memories"
+    )
+    try:
+        async with httpx.AsyncClient(
+            timeout=settings.REQUEST_TIMEOUT_SECONDS
+        ) as client:
+            response = await client.get(url, headers=_internal_headers(), params=params)
+    except httpx.HTTPError as exc:
+        return {"memories": [], "error": f"Backend unreachable: {exc}"}
+
+    if response.status_code == 401:
+        return {
+            "memories": [],
+            "error": "Unauthorized (internal token invalid)",
+        }
+    if response.status_code == 400:
+        return {"memories": [], "error": "Bad request (invalid kind or id)"}
+    if response.status_code >= 400:
+        return {
+            "memories": [],
+            "error": f"Backend error: {response.status_code}",
+        }
+
+    try:
+        data = response.json()
+    except ValueError:
+        return {"memories": [], "error": "Invalid backend response"}
+    return {"memories": data.get("memories", [])}
 
 
 @mcp.tool
