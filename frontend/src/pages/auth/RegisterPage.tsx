@@ -23,14 +23,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatApiErrorDetail } from "@/lib/apiErrors";
+import { passwordFieldSchema } from "@/lib/passwordZod";
 import axios from "axios";
 
 const registerSchema = z
   .object({
     email: z.string().email({ message: "Invalid email address" }),
-    password: z
-      .string()
-      .min(8, { message: "Password must be at least 8 characters" }),
+    password: passwordFieldSchema,
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -61,7 +61,9 @@ export const RegisterPage: React.FC = () => {
       navigate("/login"); // Or to a "verify email" page
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.data?.detail) {
-        setError(err.response.data.detail);
+        setError(
+          formatApiErrorDetail(err.response.data.detail, "Failed to register"),
+        );
       } else {
         setError("Failed to register");
       }

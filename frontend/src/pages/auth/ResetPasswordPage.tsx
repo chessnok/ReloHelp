@@ -23,13 +23,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatApiErrorDetail } from "@/lib/apiErrors";
+import { passwordFieldSchema } from "@/lib/passwordZod";
 import axios from "axios";
 
 const resetPasswordSchema = z
   .object({
-    password: z
-      .string()
-      .min(8, { message: "Password must be at least 8 characters" }),
+    password: passwordFieldSchema,
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -65,7 +65,12 @@ export const ResetPasswordPage: React.FC = () => {
       navigate("/login");
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.data?.detail) {
-        setError(err.response.data.detail);
+        setError(
+          formatApiErrorDetail(
+            err.response.data.detail,
+            "Failed to reset password",
+          ),
+        );
       } else {
         setError("Failed to reset password");
       }
