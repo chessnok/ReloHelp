@@ -2,16 +2,21 @@
 
 ## Setup
 
+From the shared `research/` uv project:
+
 ```bash
-cd research/telegram_scrapper
-uv sync
-cp .env.example .env   # TELEGRAM_API_ID, TELEGRAM_API_HASH, …
+cd research
+uv sync --group telegram
+cp telegram_scrapper/.env.example telegram_scrapper/.env   # TELEGRAM_API_ID, TELEGRAM_API_HASH, …
 ```
+
+Install all research deps (RAG + scraper + translate): `uv sync --all-groups`.
 
 ## Single chat (`telegram_scrapper.export`)
 
 ```bash
-uv run python -m telegram_scrapper.export -1001350470024 --limit 1500 -o ./my_export.csv
+cd research
+uv run python -m telegram_scrapper.export -1001350470024 --limit 1500 -o telegram_scrapper/my_export.csv
 ```
 
 - Positional `chat_id`: username, `-100…` id, or `t.me` link.
@@ -20,7 +25,7 @@ uv run python -m telegram_scrapper.export -1001350470024 --limit 1500 -o ./my_ex
 ## Many chats → one CSV (`telegram_scrapper.batch_export`)
 
 ```bash
-cd research/telegram_scrapper
+cd research
 uv run python -m telegram_scrapper.batch_export --help
 ```
 
@@ -41,8 +46,8 @@ uv run python -m telegram_scrapper.batch_export --help
 ## CSV validation (marimo)
 
 ```bash
-cd research/telegram_scrapper
-uv run marimo edit notebooks/csv_readability.py
+cd research
+uv run marimo edit telegram_scrapper/notebooks/csv_readability.py
 ```
 
 Interactive checks: row count, expected columns, dtypes, nulls, preview.

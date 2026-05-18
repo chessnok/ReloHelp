@@ -23,7 +23,7 @@ https://hazel-watcher-e79.notion.site/App-Architecture-3055ee5a340e80729cacc041f
 | `frontend/`                   | React 19 + Vite SPA, served by Nginx in compose                |
 | `mcp/`                        | Standalone FastMCP server (agent tools)                        |
 | `research/`                   | RAG pipeline (marimo notebook) + Telegram scraper              |
-| `research/telegram_scrapper/` | Telethon export scripts (`export.py`, `batch_export.py`)       |
+| `research/telegram_scrapper/` | Telethon exporter (part of `research/` uv project)             |
 | `research/rag_pipeline.py`    | marimo notebook: CSV → threads → ollama embeddings → ChromaDB  |
 | `docker-compose.yml`          | Orchestrates backend, mcp, db, nginx                           |
 | `.env.example`                | Root env (compose interpolation: shared token, RAG vars)       |
@@ -36,36 +36,37 @@ https://hazel-watcher-e79.notion.site/App-Architecture-3055ee5a340e80729cacc041f
 Prerequisites: Docker (24+) and Compose Plugin v2.
 
 ```bash
-cd research/telegram_scrapper
+cp .env.example .env                 # root: INTERNAL_API_TOKEN, RAG/ollama vars
+cp backend/.env.example backend/.env # backend runtime config
+docker compose up --build
+```
+
+Brings up `backend` (8000), `mcp` (8001), `db` (Postgres 18, 5432), `nginx` (80, serving the built frontend). Backend runs migrations on startup.
+
+Ollama is **not** containerized. Install on the host and pull the embedding model:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama serve
+ollama pull mxbai-embed-large
+```
+
+The `mcp` service reaches the host via `host.docker.internal` (mapped to `host-gateway`).
+
+### Run locally
+
+**Backend**
+
+```bash
+cd backend
 uv sync
-cp .env.example .env   # TELEGRAM_API_ID, TELEGRAM_API_HASH
-```
-#### Run single chat
-```bash
-cd research/telegram_scrapper
-uv run python -m telegram_scrapper.export -1001350470024 --limit 1500 -o ./my_export.csv
-```
-#### Run multiple chats
-```bash
-cd research/telegram_scrapper
-uv run python -m telegram_scrapper.batch_export \
-  --force-rerun \
-  --since-days 360 \
-  --sleep-between-chats 15 \
-  --sleep-between-messages-number 500 \
-  --sleep-between-messages-duration 10 \
-  -o merged.csv
+cp .env.example .env   # set DB_* and any optional API keys
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload
 ```
 
 Requires PostgreSQL 15+ with DB/user matching `backend/.env`.
 
-#### Check CSV (marimo)
-```bash
-cd research/telegram_scrapper
-uv run marimo edit notebooks/csv_readability.py
-```
-
-See `research/telegram_scrapper/docs.md` for CLI flags and export behavior.
 **Frontend**
 
 ```bash
@@ -88,43 +89,41 @@ See `mcp/README.md` for env vars (`MCP_PORT`, `BACKEND_URL`, `INTERNAL_API_TOKEN
 
 ### Telegram scraper (`research/telegram_scrapper/`)
 
-Standalone Python module with its own `requirements.txt`.
+Part of the shared `research/` uv project. Install scraper deps with `uv sync --group telegram` (or `uv sync --all-groups` for everything). Full flag reference: `research/telegram_scrapper/docs.md`.
 
 ```bash
-cd research/telegram_scrapper
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements.txt
-source .venv/bin/activate
+cd research
+uv sync --group telegram
+cp telegram_scrapper/.env.example telegram_scrapper/.env   # TELEGRAM_API_ID, TELEGRAM_API_HASH
 ```
 
 Single chat:
 
 ```bash
-python export.py -1001350470024 --limit 1500 -o ./my_export.csv
+uv run python -m telegram_scrapper.export -1001350470024 --limit 1500 -o telegram_scrapper/my_export.csv
 ```
 
-Batch (from repo root):
+Batch:
 
 ```bash
-python -m research.telegram_scrapper.batch_export \
+uv run python -m telegram_scrapper.batch_export \
   --force-rerun \
   --since-days 360 \
   --sleep-between-chats 15 \
   --sleep-between-messages-number 500 \
   --sleep-between-messages-duration 10 \
-  -o merged.csv
+  -o telegram_scrapper/merged.csv
 ```
 
-Per chat the effective row cap is `min(--limit, number_of_messages in chats.json)` when both are set. Full flag reference: `research/telegram_scrapper/docs.md`. Logging config: `research/telegram_scrapper/logging.ini` (console + `research/telegram_scrapper/logs/log.log`).
+Per chat the effective row cap is `min(--limit, number_of_messages in chats.json)` when both are set. Logging config: `research/telegram_scrapper/logging.ini` (console + `research/telegram_scrapper/logs/log.log`).
 
-Validate the merged CSV:
+Validate the merged CSV (marimo):
 
 ```bash
-python3 research/telegram_scrapper/check_scv_readability.py
+uv run marimo edit telegram_scrapper/notebooks/csv_readability.py
 ```
 
-`merged.csv` is tracked via Git LFS.
+`telegram_scrapper/merged.csv` is tracked via Git LFS.
 
 ### RAG pipeline (`research/rag_pipeline.py`)
 
@@ -132,11 +131,21 @@ marimo notebook. CSV → thread reconstruction → ollama `mxbai-embed-large` �
 
 ```bash
 cd research
-uv sync
+uv sync --group rag
 uv run marimo edit rag_pipeline.py
 ```
 
 Needs the host ollama running (`ollama serve`) with `mxbai-embed-large` pulled. Output: `research/chroma_db/` (used by the `mcp` retrieval tool when `RAG_ENABLED=true`).
+
+### CSV translation (`research/translate_csv.py`)
+
+Optional: translate `text_or_caption` to English (`deep-translator` + `langdetect`).
+
+```bash
+cd research
+uv sync --group translate
+uv run python translate_csv.py --in telegram_scrapper/merged.csv --out telegram_scrapper/merged.en.csv
+```
 
 ## Requirements
 
